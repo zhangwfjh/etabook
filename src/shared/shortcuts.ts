@@ -18,7 +18,6 @@ export const SHORTCUT_ACTIONS = [
   'toggleSidebar',
   'openSettings',
   'toggleTimeline',
-  'cycleTheme',
 ] as const
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
@@ -34,14 +33,11 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   toggleSidebar: 'Toggle sidebar',
   openSettings: 'Open settings',
   toggleTimeline: 'Toggle timeline',
-  cycleTheme: 'Cycle theme',
 }
-
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
   toggleSidebar: 'CmdOrCtrl+B',
   openSettings: 'CmdOrCtrl+Comma',
   toggleTimeline: 'CmdOrCtrl+Alt+H',
-  cycleTheme: 'CmdOrCtrl+J',
 }
 
 // --- accelerator parsing -----------------------------------------------------

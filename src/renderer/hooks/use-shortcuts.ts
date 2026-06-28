@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import { useWorkspace } from '@/state/store'
-import { applyTheme, type ThemeName } from '@/themes'
 import { matchesAccelerator } from '@/lib/accelerator'
 import { useSettings } from '@/queries/settings'
 import { DEFAULT_CONFIG, type ShortcutMap } from '../../shared/ipc'
@@ -36,13 +35,6 @@ export function useShortcuts({ onOpenSettings }: Props) {
         case 'toggleTimeline':
           useWorkspace.getState().setTimelineOpen(!useWorkspace.getState().timelineOpen)
           break
-        case 'cycleTheme': {
-          const order: ThemeName[] = ['paper-light', 'paper-dark']
-          const current = (document.documentElement.dataset.theme as ThemeName) ?? 'paper-light'
-          const next = order[(order.indexOf(current) + 1) % order.length]!
-          applyTheme(next)
-          break
-        }
       }
     }
 
@@ -50,7 +42,6 @@ export function useShortcuts({ onOpenSettings }: Props) {
       dispatch('toggleSidebar', e)
       dispatch('openSettings', e)
       dispatch('toggleTimeline', e)
-      dispatch('cycleTheme', e)
     }
 
     window.addEventListener('keydown', onKey)

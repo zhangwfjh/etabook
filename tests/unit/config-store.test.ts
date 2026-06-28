@@ -191,7 +191,6 @@ describe('config-store', () => {
     const store = createConfigStore({ userDataDir: dir, safeStorage: undefined })
     const cfg = store.get() // triggers v1→v2 migration
     expect(cfg.shortcuts.toggleSidebar).toBe('CmdOrCtrl+B')
-    expect(cfg.shortcuts.cycleTheme).toBe('CmdOrCtrl+J')
 
     rmSync(dir, { recursive: true, force: true })
   })
