@@ -818,3 +818,19 @@ body::before {
 ::-webkit-scrollbar-corner {
   background: transparent;
 }
+
+/* ── Multi-doc: focused editor group + splitter ────────────────────────── */
+/* Focused group — subtle amber inset edge ring (the active pane that owns
+   keystrokes and the dirty indicator). */
+.etabook-group-focused {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+/* Splitter hover tint (Tailwind arbitrary value covers the base; this is a
+   fallback for non-Tailwind contexts and documents the intent). */
+.etabook-splitter {
+  background: var(--border);
+}
+.etabook-splitter:hover {
+  background: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
