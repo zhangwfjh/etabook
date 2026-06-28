@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { TitleBar } from '@/components/shell/TitleBar'
 import { StatusBar } from '@/components/shell/StatusBar'
 import { WorkspacePicker } from '@/components/shell/WorkspacePicker'
-import { EditorPane } from '@/components/editor/EditorPane'
+import { EditorGroupPane } from '@/components/editor/EditorGroupPane'
+import { Splitter } from '@/components/editor/Splitter'
 import { Sidebar } from '@/components/sidebar/Sidebar'
 import { VersionTimeline } from '@/components/snapshots/VersionTimeline'
 import { SettingsModal } from '@/components/settings/SettingsModal'
@@ -18,6 +19,9 @@ import { applyEditorScale } from '@/lib/editor-scale'
 
 export default function App() {
   const ws = useWorkspace((s) => s.workspacePath)
+  const groups = useWorkspace((s) => s.groups)
+  const activeGroupId = useWorkspace((s) => s.activeGroupId)
+  const orientation = useWorkspace((s) => s.orientation)
   const { data: settings } = useSettings()
   const [settingsOpen, setSettingsOpen] = useState(false)
 
@@ -40,8 +44,18 @@ export default function App() {
         {ws ? (
           <div className="grid grid-cols-[auto_1fr_auto] min-h-0">
             <Sidebar />
-            <main className="min-h-0 overflow-auto">
-              <EditorPane />
+            <main
+              className="min-h-0 flex"
+              style={{ flexDirection: orientation === 'horizontal' ? 'row' : 'column' }}
+            >
+              {groups.map((g, i) => (
+                <Fragment key={g.id}>
+                  <div className="flex-1 min-w-0 min-h-0">
+                    <EditorGroupPane group={g} focused={g.id === activeGroupId} />
+                  </div>
+                  {i < groups.length - 1 && <Splitter orientation={orientation} />}
+                </Fragment>
+              ))}
             </main>
             <VersionTimeline />
           </div>
