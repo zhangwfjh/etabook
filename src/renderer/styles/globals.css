@@ -1,0 +1,820 @@
+@import url("https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,300..700;1,8..60,300..700&family=Figtree:ital,wght@0,300..800;1,300..800&family=JetBrains+Mono:ital,wght@0,400..700;1,400..700&display=swap");
+@import "./tokens.css";
+@import "./themes/paper-light.css";
+@import "./themes/paper-dark.css";
+@import "katex/dist/katex.min.css";
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="paper-dark"], [data-theme="paper-dark"] *));
+
+@plugin "@tailwindcss/typography";
+
+html, body, #root { height: 100%; }
+body {
+  margin: 0;
+  background-color: var(--bg-canvas);
+  color: var(--fg-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.625;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "kern", "liga", "calt";
+}
+.etabook-editor {
+  outline: none;
+  font-family: var(--font-serif);
+  font-feature-settings: "kern", "liga", "calt", "onum";
+  /* Editor content scale: base 15px * scale factor. Headings/code use em and scale with it. */
+  font-size: calc(15px * var(--editor-scale, 1));
+  line-height: 1.7;
+}
+
+.etabook-editor h1 {
+  font-size: 2.1em;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin-top: 1.1em;
+  margin-bottom: 0.5em;
+}
+
+.etabook-editor h2 {
+  font-size: 1.55em;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+  margin-top: 0.9em;
+  margin-bottom: 0.4em;
+}
+
+.etabook-editor h3 {
+  font-size: 1.28em;
+  font-weight: 600;
+  line-height: 1.35;
+  margin-top: 0.7em;
+  margin-bottom: 0.3em;
+}
+
+.etabook-editor h4 {
+  font-size: 1.12em;
+  font-weight: 600;
+  font-style: italic;
+  margin-top: 0.6em;
+  margin-bottom: 0.3em;
+}
+.etabook-editor h5 {
+  font-size: 1em;
+  font-weight: 600;
+  margin-top: 0.5em;
+  margin-bottom: 0.3em;
+}
+
+.etabook-editor h6 {
+  font-size: 1em;
+  font-weight: 600;
+  font-style: italic;
+  color: var(--fg-muted);
+  margin-top: 0.5em;
+  margin-bottom: 0.3em;
+}
+
+.etabook-editor p {
+  margin-bottom: 0.75em;
+}
+
+.etabook-editor hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.5em 0;
+}
+
+.etabook-editor ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.etabook-editor ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.etabook-editor li {
+  margin-bottom: 0.25em;
+}
+
+.etabook-editor li p {
+  margin-bottom: 0.25em;
+}
+
+.etabook-editor blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 1em;
+  margin-left: 0;
+  margin-bottom: 0.75em;
+  color: var(--fg-muted);
+  font-style: italic;
+}
+
+/* ── OFM callouts (`> [!type] title`) ──────────────────────────────── */
+.etabook-editor aside[data-callout] {
+  --callout-color: var(--callout-note);            /* overridden inline by NodeView */
+  border: 1px solid color-mix(in srgb, var(--callout-color) 35%, var(--border));
+  background: color-mix(in srgb, var(--callout-color) 7%, var(--bg-canvas));
+  border-radius: var(--radius-default);
+  padding: 8px 14px 10px;
+  margin: 0 0 0.75em 0;
+}
+
+.etabook-editor aside[data-callout].is-selected,
+.etabook-editor aside[data-callout].ProseMirror-selectednode {
+  outline: 2px solid color-mix(in srgb, var(--callout-color) 60%, transparent);
+  outline-offset: 2px;
+}
+
+.etabook-editor aside[data-callout] > .callout-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--callout-color);
+  font-weight: 600;
+  font-size: 0.92em;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+
+.etabook-editor aside[data-callout] > .callout-header .callout-icon {
+  font-size: 1.05em;
+  line-height: 1;
+}
+
+.etabook-editor aside[data-callout] > .callout-header .callout-type {
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.etabook-editor aside[data-callout] > .callout-header .callout-title {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  color: var(--fg-primary);
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+}
+
+.etabook-editor aside[data-callout] > .callout-header .callout-title::placeholder {
+  color: var(--fg-subtle);
+  font-weight: 400;
+}
+
+.etabook-editor aside[data-callout][data-math] > .callout-header {
+  font-family: "Cambria", "Georgia", "Times New Roman", serif;
+  font-style: italic;
+}
+
+.etabook-editor aside[data-callout] > .callout-body {
+  color: var(--fg-primary);
+}
+
+.etabook-editor aside[data-callout] > .callout-body > :last-child {
+  margin-bottom: 0;
+}
+
+.etabook-editor aside[data-callout-type="proof"] > .callout-body::after {
+  content: " ∎";
+  color: var(--callout-proof);
+  font-family: "Cambria", "Georgia", serif;
+}
+
+.etabook-editor pre {
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-default);
+  padding: 0.75em 1em;
+  margin-bottom: 0.75em;
+  overflow-x: auto;
+  font-size: 0.9em;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+}
+
+.etabook-editor code {
+  background-color: var(--bg-subtle);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+  font-size: 0.9em;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+}
+
+.etabook-editor pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+}
+
+.etabook-editor a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.etabook-editor a:hover {
+  opacity: 0.8;
+}
+
+.etabook-editor img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-default);
+  margin: 0.75em 0;
+}
+
+.etabook-editor table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 0.75em;
+  overflow: hidden;
+  border-radius: var(--radius-default);
+  border: 1px solid var(--border);
+}
+
+.etabook-editor td,
+.etabook-editor th {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.6em;
+  text-align: left;
+  min-width: 80px;
+  vertical-align: top;
+}
+
+.etabook-editor th {
+  background-color: var(--bg-subtle);
+  font-weight: 600;
+}
+
+.etabook-editor .selectedCell {
+  background-color: rgba(21, 189, 166, 0.18);
+}
+
+.etabook-editor .tableWrapper {
+  overflow-x: auto;
+  margin-bottom: 0.75em;
+}
+
+.etabook-editor .columnResizer {
+  border-right: 2px solid var(--accent);
+  cursor: col-resize;
+}
+
+.etabook-editor ul[data-type="taskList"] {
+  list-style: none;
+  padding-left: 0;
+}
+
+.etabook-editor ul[data-type="taskList"] li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4em;
+}
+
+.etabook-editor ul[data-type="taskList"] li > label {
+  flex-shrink: 0;
+  margin-top: 0.2em;
+}
+
+.etabook-editor ul[data-type="taskList"] li > label input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.etabook-editor ul[data-type="taskList"] li > div {
+  flex: 1;
+}
+
+.etabook-editor .hljs {
+  background: none;
+}
+
+/* Block raw-source edit mode (double-click a block). */
+.etabook-source-edit {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 2.5em;
+  overflow: hidden;
+  padding: 0.5em 0.75em;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+  font-size: 0.9em;
+  line-height: 1.5;
+  color: var(--fg-primary);
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-default);
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.etabook-source-edit:focus {
+  border-color: var(--accent);
+}
+
+.etabook-source-hidden {
+  display: none !important;
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  cursor: grab;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-default);
+  padding: 2px;
+}
+
+.drag-handle-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: calc(var(--radius-default) - 2px);
+  font-size: 12px;
+  line-height: 1;
+  color: var(--fg-subtle);
+  background: transparent;
+  border: none;
+  cursor: grab;
+  padding: 0;
+}
+
+.drag-handle-grip:hover {
+  background-color: var(--bg-subtle);
+  color: var(--accent);
+}
+
+.drag-handle:active .drag-handle-grip {
+  cursor: grabbing;
+}
+
+/* Generic selected-node outline for "Select block" action. */
+.etabook-editor .ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-default);
+}
+
+/* ── Between-block insert bar ──────────────────────────────────────── */
+/* A hairline divider with a small + tag centered on it, rendered as a
+   position:fixed overlay on document.body (NOT inside the editor contentDOM).
+   Being outside the .prose tree means it never participates in margin
+   collapsing or the typography owl selector, so blocks never shift when it
+   appears. top/left/width are set in JS from the seam's screen coords. */
+.block-insert-bar {
+  position: fixed;
+  z-index: 30;
+  height: 0;
+  animation: fade-in var(--dur-fast) var(--ease-out-soft);
+}
+
+/* The hairline stretches across the full content column. */
+.block-insert-bar-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: color-mix(in srgb, var(--accent) 30%, var(--border));
+}
+
+/* Centered group holding the action buttons, sitting on top of the line.
+   Its bg-elevated background masks the line behind the buttons. */
+.block-insert-bar-actions {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 0 3px;
+  background-color: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
+/* Small tag-like button (+, ⇅). */
+.block-insert-bar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 15px;
+  padding: 0 5px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-elevated);
+  color: var(--fg-subtle);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-out-soft),
+    border-color var(--dur-fast) var(--ease-out-soft);
+}
+
+.block-insert-bar-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.slash-command-menu {
+  z-index: 50;
+}
+
+.etabook-editor .etabook-math-inline {
+  display: inline-block;
+  vertical-align: baseline;
+  cursor: text;
+}
+
+.etabook-editor .etabook-math-inline.is-selected {
+  outline: 1px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.etabook-editor .etabook-math-block {
+  display: block;
+  margin: 1em 0;
+  padding: 0.5em 0;
+  text-align: center;
+  cursor: text;
+}
+
+.etabook-editor .etabook-math-block.is-selected {
+  outline: 1px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius-default);
+}
+
+.etabook-editor .etabook-math-edit-overlay {
+  position: absolute;
+  inset: 0;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-default);
+  padding: 0.5em 0.75em;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+  font-size: 0.9em;
+  color: var(--fg-primary);
+  resize: vertical;
+  min-height: 2.5em;
+  width: 100%;
+  box-sizing: border-box;
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+  z-index: 5;
+}
+
+.etabook-editor .etabook-mermaid {
+  margin: 1em 0;
+  padding: 1em;
+  text-align: center;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-default);
+  overflow-x: auto;
+}
+
+.etabook-editor .etabook-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.etabook-editor .etabook-mermaid-loading {
+  color: var(--fg-subtle);
+  font-size: 0.85em;
+  padding: 1em 0;
+}
+
+.etabook-editor .etabook-mermaid-error {
+  text-align: left;
+  border-color: #ef4444;
+}
+
+.etabook-editor .etabook-mermaid-error-banner {
+  background-color: color-mix(in srgb, #ef4444 12%, transparent);
+  color: #ef4444;
+  padding: 0.4em 0.6em;
+  border-radius: 4px;
+  font-size: 0.85em;
+  margin-bottom: 0.5em;
+}
+
+.etabook-editor .etabook-mermaid-source {
+  background-color: var(--bg-subtle);
+  padding: 0.5em 0.75em;
+  border-radius: 4px;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+  font-size: 0.85em;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.etabook-editor .etabook-code-block {
+  position: relative;
+  background-color: var(--bg-subtle);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-default);
+  padding: 0.75em 1em;
+  margin-bottom: 0.75em;
+  overflow-x: auto;
+  font-size: 0.9em;
+  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+}
+
+.etabook-editor .etabook-code-copy {
+  position: absolute;
+  top: 0.4em;
+  right: 0.4em;
+  padding: 0.25em;
+  border-radius: 4px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--fg-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.etabook-editor .etabook-code-block:hover .etabook-code-copy {
+  opacity: 1;
+}
+
+.etabook-editor .etabook-code-copy:hover {
+  background-color: var(--bg-subtle);
+  color: var(--fg-primary);
+}
+
+.etabook-editor .etabook-code-block-mermaid pre {
+  margin: 0;
+}
+
+/* highlight.js — GitHub light (default / paper-light theme) */
+:root, [data-theme="paper-light"] {
+  --etabook-hljs-fg: #24292f;
+  --etabook-hljs-bg: transparent;
+}
+:root .etabook-editor .hljs,
+[data-theme="paper-light"] .etabook-editor .hljs {
+  color: #24292f;
+  background: transparent;
+}
+[data-theme="paper-light"] .etabook-editor .hljs-comment,
+[data-theme="paper-light"] .etabook-editor .hljs-code,
+[data-theme="paper-light"] .etabook-editor .hljs-formula,
+:root .etabook-editor .hljs-comment,
+:root .etabook-editor .hljs-code,
+:root .etabook-editor .hljs-formula {
+  color: #6e7781;
+}
+[data-theme="paper-light"] .etabook-editor .hljs-keyword,
+[data-theme="paper-light"] .etabook-editor .hljs-doctag,
+[data-theme="paper-light"] .etabook-editor .hljs-meta .hljs-keyword,
+[data-theme="paper-light"] .etabook-editor .hljs-template-tag,
+[data-theme="paper-light"] .etabook-editor .hljs-template-variable,
+[data-theme="paper-light"] .etabook-editor .hljs-type,
+[data-theme="paper-light"] .etabook-editor .hljs-variable.language_,
+:root .etabook-editor .hljs-keyword,
+:root .etabook-editor .hljs-doctag,
+:root .etabook-editor .hljs-meta .hljs-keyword,
+:root .etabook-editor .hljs-template-tag,
+:root .etabook-editor .hljs-template-variable,
+:root .etabook-editor .hljs-type,
+:root .etabook-editor .hljs-variable.language_ {
+  color: #cf222e;
+}
+[data-theme="paper-light"] .etabook-editor .hljs-attr,
+[data-theme="paper-light"] .etabook-editor .hljs-attribute,
+[data-theme="paper-light"] .etabook-editor .hljs-literal,
+[data-theme="paper-light"] .etabook-editor .hljs-meta,
+[data-theme="paper-light"] .etabook-editor .hljs-number,
+[data-theme="paper-light"] .etabook-editor .hljs-operator,
+[data-theme="paper-light"] .etabook-editor .hljs-variable,
+[data-theme="paper-light"] .etabook-editor .hljs-selector-attr,
+[data-theme="paper-light"] .etabook-editor .hljs-selector-class,
+[data-theme="paper-light"] .etabook-editor .hljs-selector-id,
+:root .etabook-editor .hljs-attr,
+:root .etabook-editor .hljs-attribute,
+:root .etabook-editor .hljs-literal,
+:root .etabook-editor .hljs-meta,
+:root .etabook-editor .hljs-number,
+:root .etabook-editor .hljs-operator,
+:root .etabook-editor .hljs-variable,
+:root .etabook-editor .hljs-selector-attr,
+:root .etabook-editor .hljs-selector-class,
+:root .etabook-editor .hljs-selector-id {
+  color: #0550ae;
+}
+[data-theme="paper-light"] .etabook-editor .hljs-string,
+[data-theme="paper-light"] .etabook-editor .hljs-regexp,
+[data-theme="paper-light"] .etabook-editor .hljs-meta .hljs-string,
+:root .etabook-editor .hljs-string,
+:root .etabook-editor .hljs-regexp,
+:root .etabook-editor .hljs-meta .hljs-string {
+  color: #0a3069;
+}
+[data-theme="paper-light"] .etabook-editor .hljs-title,
+[data-theme="paper-light"] .etabook-editor .hljs-title.class_,
+[data-theme="paper-light"] .etabook-editor .hljs-title.class_.inherited__,
+[data-theme="paper-light"] .etabook-editor .hljs-title.function_,
+:root .etabook-editor .hljs-title,
+:root .etabook-editor .hljs-title.class_,
+:root .etabook-editor .hljs-title.class_.inherited__,
+:root .etabook-editor .hljs-title.function_ {
+  color: #6639ba;
+}
+[data-theme="paper-light"] .etabook-editor .hljs-built_in,
+[data-theme="paper-light"] .etabook-editor .hljs-symbol,
+:root .etabook-editor .hljs-built_in,
+:root .etabook-editor .hljs-symbol {
+  color: #953800;
+}
+[data-theme="paper-light"] .etabook-editor .hljs-name,
+[data-theme="paper-light"] .etabook-editor .hljs-quote,
+[data-theme="paper-light"] .etabook-editor .hljs-selector-tag,
+[data-theme="paper-light"] .etabook-editor .hljs-selector-pseudo,
+:root .etabook-editor .hljs-name,
+:root .etabook-editor .hljs-quote,
+:root .etabook-editor .hljs-selector-tag,
+:root .etabook-editor .hljs-selector-pseudo {
+  color: #116329;
+}
+
+/* highlight.js — GitHub dark (paper-dark theme only) */
+[data-theme="paper-dark"] .etabook-editor .hljs {
+  color: #c9d1d9;
+  background: transparent;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-comment,
+[data-theme="paper-dark"] .etabook-editor .hljs-code,
+[data-theme="paper-dark"] .etabook-editor .hljs-formula {
+  color: #8b949e;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-keyword,
+[data-theme="paper-dark"] .etabook-editor .hljs-doctag,
+[data-theme="paper-dark"] .etabook-editor .hljs-meta .hljs-keyword,
+[data-theme="paper-dark"] .etabook-editor .hljs-template-tag,
+[data-theme="paper-dark"] .etabook-editor .hljs-template-variable,
+[data-theme="paper-dark"] .etabook-editor .hljs-type,
+[data-theme="paper-dark"] .etabook-editor .hljs-variable.language_ {
+  color: #ff7b72;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-attr,
+[data-theme="paper-dark"] .etabook-editor .hljs-attribute,
+[data-theme="paper-dark"] .etabook-editor .hljs-literal,
+[data-theme="paper-dark"] .etabook-editor .hljs-meta,
+[data-theme="paper-dark"] .etabook-editor .hljs-number,
+[data-theme="paper-dark"] .etabook-editor .hljs-operator,
+[data-theme="paper-dark"] .etabook-editor .hljs-variable,
+[data-theme="paper-dark"] .etabook-editor .hljs-selector-attr,
+[data-theme="paper-dark"] .etabook-editor .hljs-selector-class,
+[data-theme="paper-dark"] .etabook-editor .hljs-selector-id {
+  color: #79c0ff;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-string,
+[data-theme="paper-dark"] .etabook-editor .hljs-regexp,
+[data-theme="paper-dark"] .etabook-editor .hljs-meta .hljs-string {
+  color: #a5d6ff;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-title,
+[data-theme="paper-dark"] .etabook-editor .hljs-title.class_,
+[data-theme="paper-dark"] .etabook-editor .hljs-title.class_.inherited__,
+[data-theme="paper-dark"] .etabook-editor .hljs-title.function_ {
+  color: #d2a8ff;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-built_in,
+[data-theme="paper-dark"] .etabook-editor .hljs-symbol {
+  color: #ffa657;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-name,
+[data-theme="paper-dark"] .etabook-editor .hljs-quote,
+[data-theme="paper-dark"] .etabook-editor .hljs-selector-tag,
+[data-theme="paper-dark"] .etabook-editor .hljs-selector-pseudo {
+  color: #7ee787;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-addition {
+  color: #aff5b4;
+  background-color: #033a16;
+}
+[data-theme="paper-dark"] .etabook-editor .hljs-deletion {
+  color: #ffdcd7;
+  background-color: #67060c;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AMBIENT — paper grain texture + atmospheric depth
+   A subtle noise overlay on the body gives the canvas a tactile, paper-like
+   quality without harming readability. Pure CSS (data URI SVG fractal noise).
+   ═══════════════════════════════════════════════════════════════════════ */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+[data-theme="paper-dark"] body::before {
+  mix-blend-mode: overlay;
+  opacity: 0.05;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AI NATIVE — "living" streaming surfaces
+   These utilities give AI-generated content a distinctive warm shimmer while
+   streaming, and a gentle breathing glow for "thinking" states. Reference:
+   https://elements.ai-sdk.dev/ for component patterns.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Shimmer sweep — apply to streaming text containers */
+.ai-shimmer {
+  background: linear-gradient(
+    100deg,
+    transparent 20%,
+    color-mix(in srgb, var(--accent) 14%, transparent) 50%,
+    transparent 80%
+  );
+  background-size: 200% 100%;
+  animation: var(--animate-shimmer);
+}
+
+/* Breathing dot — for "thinking" / idle-AI indicators */
+.ai-breathing-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 9999px;
+  background-color: var(--accent);
+  animation: var(--animate-breathe);
+}
+
+/* AI panel surface — warm tinted card with accent rail */
+.ai-surface {
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-elevated));
+  border: 1px solid color-mix(in srgb, var(--accent) 25%, var(--border));
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Streaming glow ring — wraps active AI generation areas */
+.ai-streaming-glow {
+  box-shadow: var(--shadow-glow);
+  animation: var(--animate-pulse-glow);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-strong);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--fg-subtle);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}

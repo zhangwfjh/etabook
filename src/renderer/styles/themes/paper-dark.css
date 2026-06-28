@@ -1,0 +1,79 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   THEME: "Warm Manuscript" (dark) — paper-dark
+   A scholarly reading-room by lamplight. Deep warm charcoal with low-glare
+   parchment-tinted text and a glowing amber accent. Eye-friendly dark.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+[data-theme="paper-dark"] {
+  /* ── Surfaces — warm charcoal, never cold black ── */
+  --bg-canvas:      #1e1a16;   /* main — deep warm charcoal-brown */
+  --bg-elevated:    #28231e;   /* cards — slightly lifted warm brown */
+  --bg-subtle:      #332d27;   /* code blocks, wells */
+  --bg-sunken:      #161310;   /* sunken — darkest */
+
+  /* ── Ink — warm parchment-tinted text, easy on the eyes ── */
+  --fg-primary:     #ebe3d5;   /* primary — warm parchment */
+  --fg-muted:       #b8ad9b;   /* muted — warm taupe */
+  --fg-subtle:      #8a8073;   /* subtle — soft brown-gray */
+
+  /* ── Accent — glowing amber, warm in the dark ── */
+  --accent:         #e89548;   /* primary amber — warm glow */
+  --accent-fg:      #1e1a16;   /* text on accent — dark */
+  --accent-soft:    #c47a35;   /* soft amber */
+  --accent-strong:  #f4a85e;   /* hover — brighter glow */
+
+  /* ── Borders — warm, subtle ── */
+  --border:         #3d3630;   /* default — warm dark border */
+  --border-strong:  #4d443b;   /* emphasized */
+
+  /* ── Semantic ── */
+  --danger:         #e8635a;
+  --warning:        #e8a848;
+  --success:        #6dba74;
+
+  /* ── AI plan surface ── */
+  --ai-plan-bg:     #28231e;
+  --ai-plan-border: #e89548;
+
+  /* ── Callout type colors — foreground only (brightened for dark) ── */
+  --callout-note:        #6e95ff;
+  --callout-abstract:    #3ec5e0;
+  --callout-info:        #6e95ff;
+  --callout-todo:        #6e95ff;
+  --callout-tip:         #5ec878;
+  --callout-success:     #5ec878;
+  --callout-question:    #e8a848;
+  --callout-warning:     #e8a848;
+  --callout-failure:     #ef7068;
+  --callout-danger:      #ef7068;
+  --callout-bug:         #e870a0;
+  --callout-example:     #a888e8;
+  --callout-quote:       #9a9080;
+  --callout-theorem:     #8888e8;
+  --callout-lemma:       #9898ee;
+  --callout-corollary:   #a8a8f4;
+  --callout-proposition: #6e95ff;
+  --callout-definition:  #3ec5e0;
+  --callout-proof:       #b8ad9b;
+  --callout-remark:      #9a9080;
+  --callout-algorithm:   #b8ad9b;
+
+  /* ── shadcn bridge ── */
+  --background:              #1e1a16;
+  --foreground:              #ebe3d5;
+  --card:                    #28231e;
+  --card-foreground:         #ebe3d5;
+  --popover:                 #28231e;
+  --popover-foreground:      #ebe3d5;
+  --primary:                 #e89548;
+  --primary-foreground:      #1e1a16;
+  --secondary:               #332d27;
+  --secondary-foreground:    #ebe3d5;
+  --muted:                   #332d27;
+  --muted-foreground:        #b8ad9b;
+  --destructive:             #e8635a;
+  --destructive-foreground:  #1e1a16;
+  --input:                   #332d27;
+  --ring:                    #e89548;
+  --radius:                  10px;
+}
