@@ -5,6 +5,7 @@ import { useSettings } from '@/queries/settings'
 import { DEFAULT_CONFIG, type ShortcutMap } from '../../shared/ipc'
 import { useGoToLine } from '@/state/go-to-line-store'
 import { useFindReplace } from '@/state/find-replace-store'
+import { getEditor } from '@/editor/doc-registry'
 
 type Props = { onOpenSettings: () => void }
 
@@ -74,6 +75,33 @@ export function useShortcuts({ onOpenSettings }: Props) {
         case 'replace':
           useFindReplace.getState().openPanel()
           break
+        case 'selectNextOccurrence':
+        case 'skipOccurrence':
+        case 'selectAllOccurrences':
+        case 'addCursorAbove':
+        case 'addCursorBelow': {
+          const s = useWorkspace.getState()
+          const ed = s.activeFilePath ? getEditor(s.activeFilePath) : null
+          if (!ed) break
+          switch (action) {
+            case 'selectNextOccurrence':
+              ed.commands.selectNextOccurrence()
+              break
+            case 'skipOccurrence':
+              ed.commands.skipOccurrence()
+              break
+            case 'selectAllOccurrences':
+              ed.commands.selectAllOccurrences()
+              break
+            case 'addCursorAbove':
+              ed.commands.addCursorAbove()
+              break
+            case 'addCursorBelow':
+              ed.commands.addCursorBelow()
+              break
+          }
+          break
+        }
       }
     }
 
@@ -89,6 +117,11 @@ export function useShortcuts({ onOpenSettings }: Props) {
        dispatch('goToLine', e)
       dispatch('find', e)
       dispatch('replace', e)
+      dispatch('selectNextOccurrence', e)
+      dispatch('skipOccurrence', e)
+      dispatch('selectAllOccurrences', e)
+      dispatch('addCursorAbove', e)
+      dispatch('addCursorBelow', e)
     }
 
     window.addEventListener('keydown', onKey)
