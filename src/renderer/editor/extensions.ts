@@ -23,6 +23,7 @@ import { CodeBlockNodeView } from './code-block-view'
 import { TrailingNode } from './trailing-node'
 import { AutoPair } from './auto-pair'
 import { LineOps } from './line-ops'
+import { Search } from './search'
 import { BlockInsertBar } from './block-insert-bar'
 
 const lowlight = createLowlight(common)
@@ -53,6 +54,7 @@ export function buildExtensions() {
     CharacterCount,
     AutoPair,
     LineOps,
+    Search,
     Heading.configure({ levels: [1, 2, 3, 4, 5, 6] }),
     TaskList,
     TaskItem.configure({ nested: true }),
