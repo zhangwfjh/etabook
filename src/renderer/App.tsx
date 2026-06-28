@@ -39,7 +39,7 @@ export default function App() {
         <TitleBar onOpenSettings={() => setSettingsOpen(true)} />
         {ws ? (
           <div className="grid grid-cols-[auto_1fr_auto] min-h-0">
-            <Sidebar onOpenSettings={() => setSettingsOpen(true)} />
+            <Sidebar />
             <main className="min-h-0 overflow-auto">
               <EditorPane />
             </main>
