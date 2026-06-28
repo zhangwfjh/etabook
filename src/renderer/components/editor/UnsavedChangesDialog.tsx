@@ -3,30 +3,35 @@ import { Button } from '@/components/ui/button'
 
 type Props = {
   open: boolean
-  fileName: string
+  fileNames: string[]
   onOpenChange: (v: boolean) => void
   onSave: () => void
   onDiscard: () => void
   onCancel: () => void
 }
 
-/**
- * Modal prompt shown when the user attempts to close a file or the window
- * while there are unsaved edits. Mirrors the three-option pattern of
- * RestoreDialog (Save / Don't save / Cancel).
- *
- *   Save    → persist edits to the source file, then proceed with the close.
- *   Don't   → discard edits and proceed.
- *   Cancel  → abort the close, keep editing.
- */
-export function UnsavedChangesDialog({ open, fileName, onOpenChange, onSave, onDiscard, onCancel }: Props) {
+function basename(p: string): string {
+  return p.split(/[\\/]/).pop() ?? p
+}
+
+export function UnsavedChangesDialog({ open, fileNames, onOpenChange, onSave, onDiscard, onCancel }: Props) {
+  const multiple = fileNames.length > 1
+  const subject = multiple
+    ? `${fileNames.length} files`
+    : (fileNames[0] ? basename(fileNames[0]) : 'this file')
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false}>
         <DialogHeader>
-          <DialogTitle>Save changes to {fileName}?</DialogTitle>
+          <DialogTitle>Save changes to {subject}?</DialogTitle>
           <DialogDescription>
-            Your changes will be lost if you don't save them.
+            {multiple ? (
+              <ul className="list-disc pl-5 mt-2 space-y-0.5">
+                {fileNames.map((f) => <li key={f}>{basename(f)}</li>)}
+              </ul>
+            ) : (
+              "Your changes will be lost if you don't save them."
+            )}
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>

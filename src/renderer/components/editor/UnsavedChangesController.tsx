@@ -1,26 +1,40 @@
 import { useEffect } from 'react'
-import { useWorkspace } from '@/state/store'
+import { useWorkspace, type UnsavedPrompt } from '@/state/store'
 import { UnsavedChangesDialog } from '@/components/editor/UnsavedChangesDialog'
-import { toast } from 'sonner'
+import { getPersist } from '@/editor/doc-registry'
 
-/**
- * Renders the unsaved-changes modal and resolves it by driving the store's
- * `persistToDisk` (registered by EditorPane) for Save, discarding for Don't
- * save, and clearing the prompt for Cancel. After Save/Discard the pending
- * close action (file switch or window close) is completed.
- *
- * Mounted once at the App root so both file-switch and window-close paths
- * share a single resolution flow.
- */
+/** Extract the doc paths in scope for a given prompt (via kind discrimination). */
+function docPathsOf(p: UnsavedPrompt): string[] {
+  switch (p.kind) {
+    case 'switch':
+    case 'closeTab':
+      return [p.docPath]
+    case 'closeGroup':
+    case 'window':
+      return p.docPaths
+  }
+}
+
 export function UnsavedChangesController() {
   const prompt = useWorkspace((s) => s.unsavedPrompt)
   const setPrompt = useWorkspace((s) => s.setUnsavedPrompt)
-  const setActiveFile = useWorkspace((s) => s.setActiveFile)
+  const openFile = useWorkspace((s) => s.openFile)
+  const closeTab = useWorkspace((s) => s.closeTab)
+  const setDocDirty = useWorkspace((s) => s.setDocDirty)
 
-  // Auto-dismiss if the file is no longer dirty (e.g. saved elsewhere).
+  const docPaths: string[] = prompt ? docPathsOf(prompt) : []
+  const fileNames = docPaths
+
+  // Auto-dismiss + complete if none of the relevant docs are still dirty
+  // (e.g. saved via Ctrl+S in the editor while the prompt was open).
   useEffect(() => {
-    if (prompt && !useWorkspace.getState().dirty) setPrompt(null)
-  }, [prompt, setPrompt])
+    if (!prompt) return
+    const stillDirty = docPaths.some((p) => useWorkspace.getState().docStates[p]?.dirty)
+    if (!stillDirty) {
+      completePending()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- docPaths derives from prompt
+  }, [prompt])
 
   if (!prompt) return null
 
@@ -28,33 +42,47 @@ export function UnsavedChangesController() {
     const p = useWorkspace.getState().unsavedPrompt
     setPrompt(null)
     if (!p) return
-    if (p.kind === 'switch' && p.targetFile) {
-      setActiveFile(p.targetFile)
-    } else if (p.kind === 'window') {
-      // forceClose bypasses the main-process close interceptor (which would
-      // re-broadcast onCloseRequested and re-prompt). close()/Alt+F4 already
-      // fed through the guard; this completes the user's decision.
-      window.api.window.forceClose()
+    switch (p.kind) {
+      case 'switch':
+        openFile(p.docPath)
+        return
+      case 'closeTab': {
+        // Find the doc's current group (it may have moved) and close it there.
+        const s = useWorkspace.getState()
+        const g = s.groups.find((x) => x.docs.includes(p.docPath))
+        if (g) closeTab(g.id, p.docPath)
+        return
+      }
+      case 'closeGroup': {
+        // Close each still-open dirty doc wherever it currently lives.
+        for (const d of p.docPaths) {
+          const s = useWorkspace.getState()
+          const g = s.groups.find((x) => x.docs.includes(d))
+          if (g) closeTab(g.id, d)
+        }
+        return
+      }
+      case 'window':
+        window.api.window.forceClose()
+        return
     }
   }
 
   async function handleSave() {
-    const persist = useWorkspace.getState().persistToDisk
-    if (!persist) {
-      toast.error('Save is not ready yet.')
-      return
-    }
     try {
-      await persist()
+      // Persist each dirty doc in scope sequentially.
+      for (const d of docPaths) {
+        const persist = getPersist(d)
+        if (persist) await persist()
+      }
       completePending()
     } catch {
-      // persist already toasts on error; keep the prompt open so the user can retry.
+      // persist already toasts on error; keep the prompt open for retry.
     }
   }
 
   function handleDiscard() {
-    // Drop unsaved edits: clear dirty and let the switch/close proceed.
-    useWorkspace.getState().setDirty(false)
+    for (const d of docPaths) setDocDirty(d, false)
     completePending()
   }
 
@@ -65,7 +93,7 @@ export function UnsavedChangesController() {
   return (
     <UnsavedChangesDialog
       open={!!prompt}
-      fileName={prompt.fileName}
+      fileNames={fileNames}
       onOpenChange={(v) => { if (!v) handleCancel() }}
       onSave={handleSave}
       onDiscard={handleDiscard}

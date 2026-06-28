@@ -35,6 +35,34 @@ export function useShortcuts({ onOpenSettings }: Props) {
         case 'toggleTimeline':
           useWorkspace.getState().setTimelineOpen(!useWorkspace.getState().timelineOpen)
           break
+        case 'splitRight':
+          useWorkspace.getState().splitRight()
+          break
+        case 'splitDown':
+          useWorkspace.getState().splitDown()
+          break
+        case 'closeTab': {
+          const s = useWorkspace.getState()
+          if (s.activeGroupId && s.activeFilePath) {
+            if (s.docStates[s.activeFilePath]?.dirty) {
+              s.setUnsavedPrompt({ kind: 'closeTab', docPath: s.activeFilePath })
+            } else {
+              s.closeTab(s.activeGroupId, s.activeFilePath)
+            }
+          }
+          break
+        }
+        case 'nextTab':
+        case 'prevTab': {
+          const s = useWorkspace.getState()
+          const g = s.groups.find((x) => x.id === s.activeGroupId)
+          if (!g || g.docs.length < 2) break
+          const idx = g.activeDoc ? g.docs.indexOf(g.activeDoc) : 0
+          const delta = action === 'nextTab' ? 1 : -1
+          const next = (idx + delta + g.docs.length) % g.docs.length
+          s.setActiveTab(g.id, g.docs[next])
+          break
+        }
       }
     }
 
@@ -42,6 +70,11 @@ export function useShortcuts({ onOpenSettings }: Props) {
       dispatch('toggleSidebar', e)
       dispatch('openSettings', e)
       dispatch('toggleTimeline', e)
+      dispatch('splitRight', e)
+      dispatch('splitDown', e)
+      dispatch('closeTab', e)
+      dispatch('nextTab', e)
+      dispatch('prevTab', e)
     }
 
     window.addEventListener('keydown', onKey)

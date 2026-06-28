@@ -2,42 +2,62 @@ import { useEffect } from 'react'
 import { useWorkspace } from '@/state/store'
 
 /**
- * Returns a callback to open a file, gating on unsaved edits. If the current
- * file is dirty, it raises the unsaved-changes prompt instead of switching
- * immediately; the actual switch happens once the user resolves the prompt
- * (see UnsavedChangesController).
- *
- * When not dirty (or no file active), it switches immediately.
+ * Returns a callback to open a file, gating on the CURRENT active doc's dirty
+ * state. If the active doc is dirty, raises the unsaved prompt instead; the
+ * actual open happens once the user resolves the prompt (UnsavedChangesController).
  */
 export function useOpenFileChecked() {
   return (targetFile: string) => {
     const s = useWorkspace.getState()
     if (s.activeFilePath === targetFile) return
-    if (s.dirty && s.activeFilePath) {
-      const name = s.activeFilePath.split(/[\\/]/).pop() ?? s.activeFilePath
-      s.setUnsavedPrompt({ kind: 'switch', fileName: name, targetFile })
+    const activeDoc = s.activeFilePath
+    if (activeDoc && (s.docStates[activeDoc]?.dirty ?? false)) {
+      s.setUnsavedPrompt({ kind: 'switch', docPath: targetFile })
     } else {
-      s.setActiveFile(targetFile)
+      s.openFile(targetFile)
+    }
+  }
+}
+
+/** Close a tab, prompting if that specific doc is dirty. */
+export function useCloseTabChecked() {
+  return (groupId: string, path: string) => {
+    const s = useWorkspace.getState()
+    if (s.docStates[path]?.dirty) {
+      s.setUnsavedPrompt({ kind: 'closeTab', docPath: path })
+    } else {
+      s.closeTab(groupId, path)
+    }
+  }
+}
+
+/** Close a whole group, prompting if any of its docs are dirty. */
+export function useCloseGroupChecked() {
+  return (groupId: string) => {
+    const s = useWorkspace.getState()
+    const g = s.groups.find((x) => x.id === groupId)
+    if (!g) return
+    const dirtyDocs = g.docs.filter((p) => s.docStates[p]?.dirty)
+    if (dirtyDocs.length > 0) {
+      s.setUnsavedPrompt({ kind: 'closeGroup', docPaths: dirtyDocs })
+    } else {
+      s.closeGroup(groupId)
     }
   }
 }
 
 /**
- * Subscribes to OS-level close requests (titlebar button, Alt+F4, taskbar)
- * and routes them through the unsaved-changes guard. The main process
- * intercepts the native close and broadcasts window:onCloseRequested instead
- * of destroying the window; this hook translates that event into either a
- * prompt (if dirty) or an immediate forceClose.
- *
- * Must be mounted once for the lifetime of the app (App root).
+ * OS close request → gather every dirty doc across all groups. Prompt if any,
+ * else forceClose. Fixes a latent bug in the old single-doc design where a
+ * dirty background doc would be silently lost on close.
  */
 export function useCloseRequestGuard() {
   useEffect(() => {
     return window.api.window.onCloseRequested(() => {
       const s = useWorkspace.getState()
-      if (s.dirty && s.activeFilePath) {
-        const name = s.activeFilePath.split(/[\\/]/).pop() ?? s.activeFilePath
-        s.setUnsavedPrompt({ kind: 'window', fileName: name, targetFile: null })
+      const dirtyDocs = s.groups.flatMap((g) => g.docs).filter((p) => s.docStates[p]?.dirty)
+      if (dirtyDocs.length > 0) {
+        s.setUnsavedPrompt({ kind: 'window', docPaths: dirtyDocs })
       } else {
         window.api.window.forceClose()
       }
