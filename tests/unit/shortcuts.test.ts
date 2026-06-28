@@ -5,6 +5,7 @@ import {
   normalizeShortcuts,
   resolveShortcuts,
   SHORTCUT_ACTIONS,
+  SHORTCUT_LABELS,
 } from '../../src/shared/shortcuts'
 
 describe('shortcuts', () => {
@@ -85,5 +86,20 @@ describe('shortcuts', () => {
         expect(DEFAULT_SHORTCUTS[action], `${action} default`).toBeTruthy()
       }
     })
+  })
+})
+
+describe('shortcuts — tab & split actions', () => {
+  it('includes the new tab/split actions', () => {
+    for (const a of ['splitRight', 'splitDown', 'closeTab', 'nextTab', 'prevTab']) {
+      expect(SHORTCUT_ACTIONS).toContain(a)
+    }
+  })
+
+  it('defines a default accelerator and label for each new action', () => {
+    for (const a of ['splitRight', 'splitDown', 'closeTab', 'nextTab', 'prevTab']) {
+      expect(DEFAULT_SHORTCUTS[a as keyof typeof DEFAULT_SHORTCUTS]).toBeTruthy()
+      expect(SHORTCUT_LABELS[a as keyof typeof SHORTCUT_LABELS]).toBeTruthy()
+    }
   })
 })

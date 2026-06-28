@@ -18,6 +18,11 @@ export const SHORTCUT_ACTIONS = [
   'toggleSidebar',
   'openSettings',
   'toggleTimeline',
+  'splitRight',
+  'splitDown',
+  'closeTab',
+  'nextTab',
+  'prevTab',
 ] as const
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
@@ -33,11 +38,21 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   toggleSidebar: 'Toggle sidebar',
   openSettings: 'Open settings',
   toggleTimeline: 'Toggle timeline',
+  splitRight: 'Split editor right',
+  splitDown: 'Split editor down',
+  closeTab: 'Close tab',
+  nextTab: 'Next tab',
+  prevTab: 'Previous tab',
 }
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
   toggleSidebar: 'CmdOrCtrl+B',
   openSettings: 'CmdOrCtrl+Comma',
   toggleTimeline: 'CmdOrCtrl+Alt+H',
+  splitRight: 'CmdOrCtrl+\\',
+  splitDown: 'CmdOrCtrl+K CmdOrCtrl+\\',
+  closeTab: 'CmdOrCtrl+W',
+  nextTab: 'CmdOrCtrl+Tab',
+  prevTab: 'CmdOrCtrl+Shift+Tab',
 }
 
 // --- accelerator parsing -----------------------------------------------------
