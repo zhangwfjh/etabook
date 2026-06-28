@@ -842,3 +842,17 @@ body::before {
   background-color: rgba(184, 132, 43, 0.5);
   border-radius: 2px;
 }
+.mc-caret {
+  display: inline-block;
+  width: 1px;
+  height: 1.2em;
+  vertical-align: text-bottom;
+  margin-left: -1px;
+ animation: mc-blink 1s steps(2, start) infinite;
+}
+.mc-caret-primary { background-color: #b8842b; }
+.mc-caret-secondary {
+  background-color: rgba(184, 132, 43, 0.5);
+  outline: 1px solid #b8842b;
+}
+@keyframes mc-blink { to { visibility: hidden; } }

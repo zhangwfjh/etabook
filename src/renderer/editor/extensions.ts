@@ -24,6 +24,7 @@ import { TrailingNode } from './trailing-node'
 import { AutoPair } from './auto-pair'
 import { LineOps } from './line-ops'
 import { Search } from './search'
+import { MultiCursor } from './multi-cursor'
 import { BlockInsertBar } from './block-insert-bar'
 
 const lowlight = createLowlight(common)
@@ -55,6 +56,7 @@ export function buildExtensions() {
     AutoPair,
     LineOps,
     Search,
+    MultiCursor,
     Heading.configure({ levels: [1, 2, 3, 4, 5, 6] }),
     TaskList,
     TaskItem.configure({ nested: true }),
