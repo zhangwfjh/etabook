@@ -3,6 +3,7 @@ import { useWorkspace } from '@/state/store'
 import { matchesAccelerator } from '@/lib/accelerator'
 import { useSettings } from '@/queries/settings'
 import { DEFAULT_CONFIG, type ShortcutMap } from '../../shared/ipc'
+import { useGoToLine } from '@/state/go-to-line-store'
 
 type Props = { onOpenSettings: () => void }
 
@@ -63,6 +64,9 @@ export function useShortcuts({ onOpenSettings }: Props) {
           s.setActiveTab(g.id, g.docs[next])
           break
         }
+        case 'goToLine':
+          useGoToLine.getState().setOpen(true)
+          break
       }
     }
 
@@ -75,6 +79,7 @@ export function useShortcuts({ onOpenSettings }: Props) {
       dispatch('closeTab', e)
       dispatch('nextTab', e)
       dispatch('prevTab', e)
+      dispatch('goToLine', e)
     }
 
     window.addEventListener('keydown', onKey)

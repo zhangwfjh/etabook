@@ -11,6 +11,8 @@ import type { Editor as TiptapEditor } from '@tiptap/react'
 import type { JSONContent } from '@tiptap/core'
 import type { FilesWriteRes } from '../../../shared/ipc'
 import { editorRegistry, persistRegistry } from '@/editor/doc-registry'
+import { GoToLineDialog } from '@/components/editor/GoToLineDialog'
+import { useGoToLine } from '@/state/go-to-line-store'
 
 type Props = {
   filePath: string
@@ -166,6 +168,9 @@ export function DocSession({ filePath, visible }: Props) {
   // Cleanup pending snapshot timer on unmount.
   useEffect(() => () => clearTimeout(snapshotTimer.current), [])
 
+  const goToLineOpen = useGoToLine((s) => s.open)
+  const setGoToLineOpen = useGoToLine((s) => s.setOpen)
+
   return (
     <div style={visible ? undefined : { display: 'none' }} className="h-full flex flex-col">
       <div className="flex-1 min-h-0 overflow-y-auto">
@@ -175,6 +180,7 @@ export function DocSession({ filePath, visible }: Props) {
           )}
         </div>
       </div>
+      <GoToLineDialog open={goToLineOpen} onOpenChange={setGoToLineOpen} editor={editor} />
     </div>
   )
 }
