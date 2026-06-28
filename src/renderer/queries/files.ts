@@ -55,6 +55,23 @@ export const useCopyEntry = () => {
   })
 }
 
+export const usePasteEntry = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (req: { srcPath: string; destDir: string; mode: 'copy' | 'cut' }) =>
+      window.api.files.paste(req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tree'] }),
+  })
+}
+
+export const useTrashEntry = () => {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (req: { filePath: string }) => window.api.files.trash(req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['tree'] }),
+  })
+}
+
 export const useDeleteEntry = () => {
   const qc = useQueryClient()
   return useMutation({

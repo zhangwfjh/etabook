@@ -78,22 +78,62 @@ export function deleteEntry(filePath: string): { ok: true } {
   rmSync(filePath, { recursive: true, force: true })
   return { ok: true }
 }
-export function copyEntry(filePath: string): { filePath: string } {
+
+/** Move an entry to the OS trash (Recycle Bin / Trash). Reversible by the user. */
+export async function trashEntry(filePath: string): Promise<{ ok: true }> {
   if (!existsSync(filePath)) throw new Error(`Not found: ${filePath}`)
-  const dir = dirname(filePath)
-  const base = basename(filePath)
-  const dot = base.lastIndexOf('.')
-  const stem = dot > 0 ? base.slice(0, dot) : base
-  const ext = dot > 0 ? base.slice(dot) : ''
+  await shell.trashItem(filePath)
+  return { ok: true }
+}
+/** Resolve a collision-free destination path for `name` inside `destDir`. */
+function uniqueDest(destDir: string, name: string): string {
+  const dot = name.lastIndexOf('.')
+  const stem = dot > 0 ? name.slice(0, dot) : name
+  const ext = dot > 0 ? name.slice(dot) : ''
   const candidate = (n: number) =>
     n === 0 ? `${stem}${ext}` : `${stem} copy${n > 1 ? ` ${n}` : ''}${ext}`
   let n = 0
-  let dest = join(dir, candidate(n))
+  let dest = join(destDir, candidate(n))
   while (existsSync(dest)) {
     n += 1
-    dest = join(dir, candidate(n))
+    dest = join(destDir, candidate(n))
   }
+  return dest
+}
+
+export function copyEntry(filePath: string): { filePath: string } {
+  if (!existsSync(filePath)) throw new Error(`Not found: ${filePath}`)
+  const dest = uniqueDest(dirname(filePath), basename(filePath))
   cpSync(filePath, dest, { recursive: true })
+  return { filePath: dest }
+}
+
+/**
+ * Paste (copy or move) `srcPath` into `destDir` with collision-safe naming.
+ * - mode 'copy': duplicate into destDir (source untouched); clipboard retained.
+ * - mode 'cut':  move into destDir; source removed on success.
+ * Guards against pasting a folder into itself or one of its descendants.
+ * Returns the resulting destination path.
+ */
+export function pasteEntry(srcPath: string, destDir: string, mode: 'copy' | 'cut'): { filePath: string } {
+  if (!existsSync(srcPath)) throw new Error(`Not found: ${srcPath}`)
+  mkdirSync(destDir, { recursive: true })
+
+  // Refuse to paste a directory into itself or a descendant (would recurse).
+  const srcNorm = srcPath + sep
+  if ((destDir + sep) === srcNorm || (destDir + sep).startsWith(srcNorm)) {
+    throw new Error('Cannot paste a folder into itself')
+  }
+
+  const dest = uniqueDest(destDir, basename(srcPath))
+  // No-op: source already lives at the resolved destination.
+  if (dest === srcPath) return { filePath: dest }
+
+  if (mode === 'copy') {
+    cpSync(srcPath, dest, { recursive: true })
+  } else {
+    renameSync(srcPath, dest)
+  }
   return { filePath: dest }
 }
 

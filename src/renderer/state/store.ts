@@ -6,6 +6,8 @@ export type PendingExternal = {
   newMtime: number
 }
 
+type FileClipboard = { path: string; mode: 'copy' | 'cut' }
+
 type WorkspaceState = {
   workspacePath: string | null
   activeFilePath: string | null
@@ -26,6 +28,10 @@ type WorkspaceState = {
    *   targetFile: file to switch to after resolving (switch only)
    */
   unsavedPrompt: { kind: 'switch' | 'window'; fileName: string; targetFile: string | null } | null
+  /** Currently selected node in the sidebar tree (file OR folder). Drives sidebar-scoped keyboard ops (copy/cut/paste/delete). */
+  selectedTreePath: string | null
+  /** In-memory file clipboard for sidebar copy/cut → paste. `cut` is cleared after a successful paste. */
+  fileClipboard: FileClipboard | null
 
   setWorkspace(path: string | null): void
   setActiveFile(path: string | null): void
@@ -43,6 +49,8 @@ type WorkspaceState = {
   /** Set by EditorPane; performs an explicit write of current edits to disk. */
   persistToDisk: (() => Promise<void>) | null
   setPersistToDisk(fn: (() => Promise<void>) | null): void
+  setSelectedTreePath(path: string | null): void
+  setFileClipboard(cb: FileClipboard | null): void
 }
 
 export const useWorkspace = create<WorkspaceState>((set) => ({
@@ -58,7 +66,9 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   toggleEditorMode: null,
   unsavedPrompt: null,
   persistToDisk: null,
-  setWorkspace: (p) => set({ workspacePath: p, activeFilePath: null, openFilePaths: [] }),
+  selectedTreePath: null,
+  fileClipboard: null,
+  setWorkspace: (p) => set({ workspacePath: p, activeFilePath: null, openFilePaths: [], selectedTreePath: null, fileClipboard: null }),
   setActiveFile: (p) => set({ activeFilePath: p, dirty: false, editorMode: 'view' }),
   addOpenFile: (p) => set((s) => s.openFilePaths.includes(p) ? s : { openFilePaths: [...s.openFilePaths, p] }),
   removeOpenFile: (p) => set((s) => ({
@@ -75,4 +85,6 @@ export const useWorkspace = create<WorkspaceState>((set) => ({
   setToggleEditorMode: (fn) => set({ toggleEditorMode: fn }),
   setUnsavedPrompt: (p) => set({ unsavedPrompt: p }),
   setPersistToDisk: (fn) => set({ persistToDisk: fn }),
+  setSelectedTreePath: (path) => set({ selectedTreePath: path }),
+  setFileClipboard: (cb) => set({ fileClipboard: cb }),
 }))

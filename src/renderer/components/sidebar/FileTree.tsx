@@ -17,17 +17,22 @@ type Props = {
 }
 
 export function FileTree({ root, activePath, onSelect, className }: Props) {
+  const selectedPath = useWorkspace(s => s.selectedTreePath)
+  const clipboard = useWorkspace(s => s.fileClipboard)
+  const cutPath = clipboard?.mode === 'cut' ? clipboard.path : null
   return (
     <ul className={cn('text-sm select-none', className)}>
-      <TreeRow node={root} depth={0} activePath={activePath} onSelect={onSelect} />
+      <TreeRow node={root} depth={0} activePath={activePath} selectedPath={selectedPath} cutPath={cutPath} onSelect={onSelect} />
     </ul>
   )
 }
 
-function TreeRow({ node, depth, activePath, onSelect }: {
+function TreeRow({ node, depth, activePath, selectedPath, cutPath, onSelect }: {
   node: TreeNode
   depth: number
   activePath?: string | null
+  selectedPath?: string | null
+  cutPath?: string | null
   onSelect: (p: string) => void
 }) {
   const [open, setOpen] = useState(depth === 0)
@@ -37,6 +42,9 @@ function TreeRow({ node, depth, activePath, onSelect }: {
   const rename = useRenameEntry()
   const create = useCreateEntry()
   const ws = useWorkspace(s => s.workspacePath)
+  const setSelectedTreePath = useWorkspace(s => s.setSelectedTreePath)
+  const isSelected = selectedPath === node.path
+  const isCut = cutPath === node.path
 
   function handleRenameSubmit() {
     const trimmed = renameValue.trim()
@@ -73,9 +81,13 @@ function TreeRow({ node, depth, activePath, onSelect }: {
 
   const content = node.isDirectory ? (
     <button
-      className="w-full flex items-center gap-1 px-1 py-0.5 rounded hover:bg-bg-subtle text-fg-muted"
+      className={cn(
+        'w-full flex items-center gap-1 px-1 py-0.5 rounded',
+        isSelected ? 'bg-bg-subtle text-fg-primary ring-1 ring-border' : 'hover:bg-bg-subtle text-fg-muted',
+        isCut && 'opacity-50',
+      )}
       style={{ paddingLeft: 4 + depth * 12 }}
-      onClick={() => setOpen(o => !o)}
+      onClick={() => { setSelectedTreePath(node.path); setOpen(o => !o) }}
       onContextMenu={(e) => e.stopPropagation()}
     >
       <ChevronRight className={cn('size-3 transition-transform', open && 'rotate-90')} />
@@ -102,10 +114,13 @@ function TreeRow({ node, depth, activePath, onSelect }: {
       className={cn(
         'w-full flex items-center gap-1 px-1 py-0.5 rounded text-left',
         'hover:bg-bg-subtle',
-        activePath === node.path ? 'bg-bg-subtle text-fg-primary' : 'text-fg-muted',
+        isSelected ? 'bg-bg-subtle text-fg-primary ring-1 ring-border'
+          : activePath === node.path ? 'bg-bg-subtle text-fg-primary'
+          : 'text-fg-muted',
+        isCut && 'opacity-50',
       )}
       style={{ paddingLeft: 4 + depth * 12 + 12 }}
-      onClick={() => onSelect(node.path)}
+      onClick={() => { setSelectedTreePath(node.path); onSelect(node.path) }}
       onContextMenu={(e) => e.stopPropagation()}
     >
       <FileText className="size-3.5" />
@@ -143,7 +158,7 @@ function TreeRow({ node, depth, activePath, onSelect }: {
       {node.isDirectory && open ? (
         <ul>
           {node.children?.map(c => (
-            <TreeRow key={c.path} node={c} depth={depth + 1} activePath={activePath} onSelect={onSelect} />
+            <TreeRow key={c.path} node={c} depth={depth + 1} activePath={activePath} selectedPath={selectedPath} cutPath={cutPath} onSelect={onSelect} />
           )) ?? null}
           {creating ? (
             <li>

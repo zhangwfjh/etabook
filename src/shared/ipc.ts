@@ -12,8 +12,10 @@ export const IPC = {
   filesWrite:           'files:write',
   filesCreate:          'files:create',
   filesRename:          'files:rename',
+  filesPaste:           'files:paste',
   filesCopy:            'files:copy',
   filesDelete:          'files:delete',
+  filesTrash:           'files:trash',
   filesReveal:          'files:reveal',
   filesOnTreeChanged:   'files:onTreeChanged',
   filesOnContentChanged:'files:onContentChanged',
@@ -163,6 +165,7 @@ export type StreamErrorEvt = { abortKey: string; message: string }
 export type FilesWriteRes = { hash: string; mtime: number; size: number }
 export type FilesCreateRes = { filePath: string }
 export type FilesDeleteRes = { ok: true }
+export type FilesPasteReq = { srcPath: string; destDir: string; mode: 'copy' | 'cut' }
 
 export type FilesTreeChangedEvt = {
   workspacePath: string

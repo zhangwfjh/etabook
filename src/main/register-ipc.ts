@@ -1,9 +1,9 @@
 import { app, BrowserWindow } from 'electron'
 import { join, sep } from 'node:path'
 import { statSync } from 'node:fs'
-import { IPC, type FilesWriteRes, type FilesCreateRes, type FilesDeleteRes, type AppConfig, type SecretKey, type SnapshotTrigger } from '../shared/ipc'
+import { IPC, type FilesWriteRes, type FilesCreateRes, type FilesDeleteRes, type FilesPasteReq, type AppConfig, type SecretKey, type SnapshotTrigger } from '../shared/ipc'
 import { createConfigStore, type ConfigStore } from './config-store'
-import { listTree, readFile, writeFile, createEntry, renameEntry, deleteEntry, copyEntry, reveal } from './file-service'
+import { listTree, readFile, writeFile, createEntry, renameEntry, deleteEntry, copyEntry, pasteEntry, trashEntry, reveal } from './file-service'
 import { createSnapshotService, type SnapshotService } from './snapshot-service'
 import { handle, broadcast, pickDirectory } from './ipc-helpers'
 import { registerLlm } from './register-llm'
@@ -101,8 +101,14 @@ export function registerIpc(): Deps {
   handle<[{ filePath: string }], FilesDeleteRes>(IPC.filesDelete, (_e, req) => {
     return deleteEntry(req.filePath)
   })
+  handle<[{ filePath: string }], FilesDeleteRes>(IPC.filesTrash, async (_e, req) => {
+    return trashEntry(req.filePath)
+  })
   handle<[{ filePath: string }], FilesCreateRes>(IPC.filesCopy, (_e, req) => {
     return copyEntry(req.filePath)
+  })
+  handle<[FilesPasteReq], FilesCreateRes>(IPC.filesPaste, (_e, req) => {
+    return pasteEntry(req.srcPath, req.destDir, req.mode)
   })
   handle(IPC.filesReveal, (_e, req: { filePath: string }) => {
     reveal(req.filePath)

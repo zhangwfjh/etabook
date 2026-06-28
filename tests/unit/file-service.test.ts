@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { listTree, readFile, writeFile, copyEntry } from '../../src/main/file-service'
+import { listTree, readFile, writeFile, copyEntry, pasteEntry } from '../../src/main/file-service'
 
 describe('file-service', () => {
   let ws: string
@@ -84,4 +84,58 @@ describe('file-service', () => {
     expect(c2.filePath).toBe(join(ws, 'Makefile copy 2'))
     rmSync(ws, { recursive: true, force: true })
   })
+  it('pasteEntry copies a file into a target directory', () => {
+    writeFileSync(join(ws, 'src.md'), 'body')
+    mkdirSync(join(ws, 'sub'), { recursive: true })
+
+    const res = pasteEntry(join(ws, 'src.md'), join(ws, 'sub'), 'copy')
+    expect(res.filePath).toBe(join(ws, 'sub', 'src.md'))
+    expect(readFileSync(res.filePath, 'utf8')).toBe('body')
+    // copy leaves the source in place
+    expect(readFileSync(join(ws, 'src.md'), 'utf8')).toBe('body')
+    rmSync(ws, { recursive: true, force: true })
+  })
+
+  it('pasteEntry moves a file on cut mode', () => {
+    writeFileSync(join(ws, 'a.md'), 'move-me')
+    mkdirSync(join(ws, 'dst'), { recursive: true })
+
+    const res = pasteEntry(join(ws, 'a.md'), join(ws, 'dst'), 'cut')
+    expect(res.filePath).toBe(join(ws, 'dst', 'a.md'))
+    expect(readFileSync(res.filePath, 'utf8')).toBe('move-me')
+    expect(existsSync(join(ws, 'a.md'))).toBe(false)
+    rmSync(ws, { recursive: true, force: true })
+  })
+
+  it('pasteEntry collision-suffixes when name already exists in dest', () => {
+    writeFileSync(join(ws, 'n.md'), 'one')
+    mkdirSync(join(ws, 't'), { recursive: true })
+    writeFileSync(join(ws, 't', 'n.md'), 'existing')
+
+    const res = pasteEntry(join(ws, 'n.md'), join(ws, 't'), 'copy')
+    expect(res.filePath).toBe(join(ws, 't', 'n copy.md'))
+    expect(readFileSync(join(ws, 't', 'n.md'), 'utf8')).toBe('existing')
+    expect(readFileSync(res.filePath, 'utf8')).toBe('one')
+    rmSync(ws, { recursive: true, force: true })
+  })
+
+  it('pasteEntry copies a folder recursively', () => {
+    mkdirSync(join(ws, 'fold', 'nested'), { recursive: true })
+    writeFileSync(join(ws, 'fold', 'inner.md'), 'x')
+    mkdirSync(join(ws, 'target'), { recursive: true })
+
+    const res = pasteEntry(join(ws, 'fold'), join(ws, 'target'), 'copy')
+    expect(res.filePath).toBe(join(ws, 'target', 'fold'))
+    expect(readFileSync(join(res.filePath, 'inner.md'), 'utf8')).toBe('x')
+    // source folder untouched
+    expect(existsSync(join(ws, 'fold', 'inner.md'))).toBe(true)
+    rmSync(ws, { recursive: true, force: true })
+  })
+
+  it('pasteEntry refuses to paste a folder into itself', () => {
+    mkdirSync(join(ws, 'self', 'deep'), { recursive: true })
+    expect(() => pasteEntry(join(ws, 'self'), join(ws, 'self', 'deep'), 'copy')).toThrowError(/itself/i)
+    rmSync(ws, { recursive: true, force: true })
+  })
+
 })

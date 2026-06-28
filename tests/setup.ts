@@ -23,6 +23,7 @@ vi.mock('electron', () => ({
   },
   shell: {
     showItemInFolder: vi.fn(),
+    trashItem: vi.fn().mockResolvedValue(undefined),
   },
 }))
 

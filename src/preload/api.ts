@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import {
-  IPC, type TreeNode, type FileReadResult, type FilesWriteRes, type FilesCreateRes, type FilesDeleteRes,
+  IPC, type TreeNode, type FileReadResult, type FilesWriteRes, type FilesCreateRes, type FilesDeleteRes, type FilesPasteReq,
   type SnapshotMeta, type SnapshotContent, type AppConfig, type SecretKey, type ProviderCatalogInfo,
   type StreamStartReq, type StreamStartRes, type StreamChunkEvt, type StreamEndEvt, type StreamErrorEvt, type OllamaRefreshReq,
   type FilesContentChangedEvt, type FilesTreeChangedEvt, type WindowMaximizeEvt, type WindowCloseRequestedEvt,
@@ -35,7 +35,9 @@ const files = {
   create: invoke<{ workspacePath: string; relPath: string; content: string; isDirectory: boolean }, FilesCreateRes>(IPC.filesCreate),
   rename: invoke<{ filePath: string; newName: string }, FilesCreateRes>(IPC.filesRename),
   copy:   invoke<{ filePath: string }, FilesCreateRes>(IPC.filesCopy),
+  paste:  invoke<FilesPasteReq, FilesCreateRes>(IPC.filesPaste),
   delete: invoke<{ filePath: string }, FilesDeleteRes>(IPC.filesDelete),
+  trash:  invoke<{ filePath: string }, FilesDeleteRes>(IPC.filesTrash),
   reveal: invoke<{ filePath: string }, void>(IPC.filesReveal),
   onTreeChanged:    (cb: (e: FilesTreeChangedEvt) => void) => on(IPC.filesOnTreeChanged, cb),
   onContentChanged: (cb: (e: FilesContentChangedEvt) => void) => on(IPC.filesOnContentChanged, cb),
