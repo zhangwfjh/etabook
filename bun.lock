@@ -7,6 +7,7 @@
       "dependencies": {
         "@earendil-works/pi-ai": "^0.79.9",
         "@tanstack/react-query": "^5.101.0",
+        "@tiptap/extension-character-count": "^3.26.0",
         "@tiptap/extension-code-block-lowlight": "^3.26.0",
         "@tiptap/extension-drag-handle": "^3.26.0",
         "@tiptap/extension-image": "^3.26.0",
@@ -557,6 +558,8 @@
     "@tiptap/extension-bubble-menu": ["@tiptap/extension-bubble-menu@3.26.0", "https://registry.npmmirror.com/@tiptap/extension-bubble-menu/-/extension-bubble-menu-3.26.0.tgz", { "dependencies": { "@floating-ui/dom": "^1.0.0" }, "peerDependencies": { "@tiptap/core": "3.26.0", "@tiptap/pm": "3.26.0" } }, "sha512-H2E3Hp0lV79jQV8YGtdDJkXkUalXZeYzKCx+vCZlDpb2ChS7/rNT9YY7poRA1NlJLUO0DH1wbAnFhx9KZMUx5g=="],
 
     "@tiptap/extension-bullet-list": ["@tiptap/extension-bullet-list@3.26.0", "https://registry.npmmirror.com/@tiptap/extension-bullet-list/-/extension-bullet-list-3.26.0.tgz", { "peerDependencies": { "@tiptap/extension-list": "3.26.0" } }, "sha512-Jv7BX+kBB2wUIvO/NhuUjv+T3kAed2Tjr664fgQ2zKT6X69jKIkYuCCedrIHuOyaOQ+SBDuH9h51wYv/E97QgQ=="],
+
+    "@tiptap/extension-character-count": ["@tiptap/extension-character-count@3.27.1", "https://registry.npmmirror.com/@tiptap/extension-character-count/-/extension-character-count-3.27.1.tgz", { "peerDependencies": { "@tiptap/extensions": "3.27.1" } }, "sha512-rzZUyAh+fCVIYRB2ZXsLGweevUGZ/Xsi6snGCXbsFAX71+BZJ2rr0hKOoIKqSiW8q20+AY73rTbTT/G7bZqdGg=="],
 
     "@tiptap/extension-code": ["@tiptap/extension-code@3.26.0", "https://registry.npmmirror.com/@tiptap/extension-code/-/extension-code-3.26.0.tgz", { "peerDependencies": { "@tiptap/core": "3.26.0" } }, "sha512-VJYcV6rvjnENRTroOi9tDcHWW6G0pmCoRETwatlbgfDzuCmkTOwVwQjeJCXOVMMLNPzNiXZzibsRCUt+Azq/jw=="],
 
