@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Copy, History, Minus, PanelLeft, Save, Settings, Square, X } from 'lucide-react'
+import { Copy, History, Minus, PanelLeft, Redo2, Save, Settings, Square, Undo2, X } from 'lucide-react'
 import { useWorkspace } from '@/state/store'
+import { getEditor } from '@/editor/doc-registry'
+import { useSettings } from '@/queries/settings'
+import { resolveShortcuts } from '../../../shared/ipc'
 
 type Props = { onOpenSettings: () => void }
 export function TitleBar({ onOpenSettings }: Props) {
@@ -16,6 +19,10 @@ export function TitleBar({ onOpenSettings }: Props) {
   const persistToDisk = useWorkspace(s => s.persistToDisk)
   const [saving, setSaving] = useState(false)
   const [maximized, setMaximized] = useState(false)
+  const [canUndo, setCanUndo] = useState(false)
+  const [canRedo, setCanRedo] = useState(false)
+  const { data: settings } = useSettings()
+  const shortcuts = resolveShortcuts(settings?.shortcuts)
   useEffect(() => {
     window.api.window.isMaximized().then(m => setMaximized(m ?? false))
     const off = window.api.window.onMaximizeChange(e => setMaximized(e.isMaximized))
@@ -23,6 +30,28 @@ export function TitleBar({ onOpenSettings }: Props) {
   }, [])
 
   const noDrag = { WebkitAppRegion: 'none' } as React.CSSProperties
+  useEffect(() => {
+    if (!active) { setCanUndo(false); setCanRedo(false); return }
+    const editor = getEditor(active)
+    if (!editor) { setCanUndo(false); setCanRedo(false); return }
+    const read = () => {
+      setCanUndo(editor.can().undo())
+      setCanRedo(editor.can().redo())
+    }
+    read()
+    editor.on('transaction', read)
+    return () => { editor.off('transaction', read) }
+  }, [active])
+
+  const isEditMode = mode === 'edit'
+  function handleUndo() {
+    const editor = active ? getEditor(active) : null
+    editor?.chain().focus().undo().run()
+  }
+  function handleRedo() {
+    const editor = active ? getEditor(active) : null
+    editor?.chain().focus().redo().run()
+  }
 
   return (
     <header className="h-9 flex items-center gap-2 px-2 border-b border-border bg-bg-elevated select-none" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
@@ -39,6 +68,30 @@ export function TitleBar({ onOpenSettings }: Props) {
         Etabook{ws ? ` — ${ws.split(/[\\/]/).pop()}` : ''}{active ? ` — ${active.split(/[\\/]/).pop()}` : ''}
       </div>
       <div className="flex items-center gap-2" style={noDrag}>
+        {active && isEditMode && (
+          <div className="flex items-center gap-0.5" style={noDrag}>
+            <button
+              type="button"
+              onClick={handleUndo}
+              disabled={!canUndo}
+              title={`Undo (${shortcuts.undo ?? ''})`}
+              className="p-1 rounded hover:bg-bg-subtle text-fg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+              aria-label="Undo"
+            >
+              <Undo2 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={handleRedo}
+              disabled={!canRedo}
+              title={`Redo (${shortcuts.redo ?? ''})`}
+              className="p-1 rounded hover:bg-bg-subtle text-fg-muted disabled:opacity-30 disabled:hover:bg-transparent"
+              aria-label="Redo"
+            >
+              <Redo2 size={14} />
+            </button>
+          </div>
+        )}
         {active && toggleMode && (
           <div
             className="flex items-center text-[11px] rounded border border-border overflow-hidden"
