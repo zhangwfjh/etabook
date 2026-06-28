@@ -12,6 +12,7 @@ import type { JSONContent } from '@tiptap/core'
 import type { FilesWriteRes } from '../../../shared/ipc'
 import { editorRegistry, persistRegistry } from '@/editor/doc-registry'
 import { GoToLineDialog } from '@/components/editor/GoToLineDialog'
+import { FindReplacePanel } from '@/components/editor/FindReplacePanel'
 import { useGoToLine } from '@/state/go-to-line-store'
 
 type Props = {
@@ -172,15 +173,16 @@ export function DocSession({ filePath, visible }: Props) {
   const setGoToLineOpen = useGoToLine((s) => s.setOpen)
 
   return (
-    <div style={visible ? undefined : { display: 'none' }} className="h-full flex flex-col">
-      <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="max-w-[var(--width-canvas-max)] mx-auto px-6 py-8 w-full">
-          {isFetching ? null : (
-            <Editor initialContent={initialDoc} editable={mode === 'edit'} onReady={handleReady} />
-          )}
-        </div>
-      </div>
-      <GoToLineDialog open={goToLineOpen} onOpenChange={setGoToLineOpen} editor={editor} />
+    <div style={visible ? { position: 'relative' } : { position: 'relative', display: 'none' }} className="h-full flex flex-col">
+       <div className="flex-1 min-h-0 overflow-y-auto">
+         <div className="max-w-[var(--width-canvas-max)] mx-auto px-6 py-8 w-full">
+           {isFetching ? null : (
+             <Editor initialContent={initialDoc} editable={mode === 'edit'} onReady={handleReady} />
+           )}
+         </div>
+       </div>
+      {mode === 'edit' && <FindReplacePanel editor={editor} />}
+       <GoToLineDialog open={goToLineOpen} onOpenChange={setGoToLineOpen} editor={editor} />
     </div>
   )
 }

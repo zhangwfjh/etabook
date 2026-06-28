@@ -834,3 +834,11 @@ body::before {
 .etabook-splitter:hover {
   background: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
+.search-match {
+  background-color: rgba(217, 177, 90, 0.25);
+  border-radius: 2px;
+}
+.search-match-current {
+  background-color: rgba(184, 132, 43, 0.5);
+  border-radius: 2px;
+}

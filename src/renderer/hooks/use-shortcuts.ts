@@ -4,6 +4,7 @@ import { matchesAccelerator } from '@/lib/accelerator'
 import { useSettings } from '@/queries/settings'
 import { DEFAULT_CONFIG, type ShortcutMap } from '../../shared/ipc'
 import { useGoToLine } from '@/state/go-to-line-store'
+import { useFindReplace } from '@/state/find-replace-store'
 
 type Props = { onOpenSettings: () => void }
 
@@ -64,8 +65,14 @@ export function useShortcuts({ onOpenSettings }: Props) {
           s.setActiveTab(g.id, g.docs[next])
           break
         }
-        case 'goToLine':
-          useGoToLine.getState().setOpen(true)
+         case 'goToLine':
+           useGoToLine.getState().setOpen(true)
+           break
+        case 'find':
+          useFindReplace.getState().openPanel()
+          break
+        case 'replace':
+          useFindReplace.getState().openPanel()
           break
       }
     }
@@ -79,7 +86,9 @@ export function useShortcuts({ onOpenSettings }: Props) {
       dispatch('closeTab', e)
       dispatch('nextTab', e)
       dispatch('prevTab', e)
-      dispatch('goToLine', e)
+       dispatch('goToLine', e)
+      dispatch('find', e)
+      dispatch('replace', e)
     }
 
     window.addEventListener('keydown', onKey)
