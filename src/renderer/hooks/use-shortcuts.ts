@@ -66,15 +66,24 @@ export function useShortcuts({ onOpenSettings }: Props) {
           s.setActiveTab(g.id, g.docs[next])
           break
         }
-         case 'goToLine':
-           useGoToLine.getState().setOpen(true)
-           break
+        case 'goToLine': {
+          const s = useWorkspace.getState()
+          const ed = s.activeFilePath ? getEditor(s.activeFilePath) : null
+          if (!ed || !ed.isEditable) break
+          useGoToLine.getState().setOpen(true)
+          break
+        }
         case 'find':
+        case 'replace': {
+          const ws = useWorkspace.getState()
+          const ed = ws.activeFilePath ? getEditor(ws.activeFilePath) : null
+          if (!ed || !ed.isEditable) break
           useFindReplace.getState().openPanel()
           break
-        case 'replace':
-          useFindReplace.getState().openPanel()
-          break
+        }
+        case 'duplicateLine':
+        case 'moveLineUp':
+        case 'moveLineDown':
         case 'selectNextOccurrence':
         case 'skipOccurrence':
         case 'selectAllOccurrences':
@@ -82,8 +91,17 @@ export function useShortcuts({ onOpenSettings }: Props) {
         case 'addCursorBelow': {
           const s = useWorkspace.getState()
           const ed = s.activeFilePath ? getEditor(s.activeFilePath) : null
-          if (!ed) break
+          if (!ed || !ed.isEditable) break
           switch (action) {
+            case 'duplicateLine':
+              ed.commands.duplicateLine()
+              break
+            case 'moveLineUp':
+              ed.commands.moveLineUp()
+              break
+            case 'moveLineDown':
+              ed.commands.moveLineDown()
+              break
             case 'selectNextOccurrence':
               ed.commands.selectNextOccurrence()
               break
@@ -116,12 +134,14 @@ export function useShortcuts({ onOpenSettings }: Props) {
       dispatch('prevTab', e)
        dispatch('goToLine', e)
       dispatch('find', e)
-      dispatch('replace', e)
       dispatch('selectNextOccurrence', e)
       dispatch('skipOccurrence', e)
       dispatch('selectAllOccurrences', e)
       dispatch('addCursorAbove', e)
       dispatch('addCursorBelow', e)
+      dispatch('duplicateLine', e)
+      dispatch('moveLineUp', e)
+      dispatch('moveLineDown', e)
     }
 
     window.addEventListener('keydown', onKey)

@@ -59,7 +59,7 @@ describe('AutoPair — selection wrapping', () => {
     editor.commands.setTextSelection({ from: 1, to: 3 })
     insertText(editor, '(')
     expect(getText(editor)).toBe('(hi)')
-    expect(editor.state.selection.from).toBe(4)
+    expect(editor.state.selection.from).toBe(5)
   })
 })
 

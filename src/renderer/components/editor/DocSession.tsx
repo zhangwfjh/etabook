@@ -14,6 +14,7 @@ import { editorRegistry, persistRegistry } from '@/editor/doc-registry'
 import { GoToLineDialog } from '@/components/editor/GoToLineDialog'
 import { FindReplacePanel } from '@/components/editor/FindReplacePanel'
 import { useGoToLine } from '@/state/go-to-line-store'
+import { useFindReplace } from '@/state/find-replace-store'
 
 type Props = {
   filePath: string
@@ -171,6 +172,11 @@ export function DocSession({ filePath, visible }: Props) {
 
   const goToLineOpen = useGoToLine((s) => s.open)
   const setGoToLineOpen = useGoToLine((s) => s.setOpen)
+
+  // Auto-close the find/replace panel when leaving edit mode.
+  useEffect(() => {
+    if (mode !== 'edit') useFindReplace.getState().closePanel()
+  }, [mode])
 
   return (
     <div style={visible ? { position: 'relative' } : { position: 'relative', display: 'none' }} className="h-full flex flex-col">

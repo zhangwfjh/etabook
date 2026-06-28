@@ -8,11 +8,14 @@ type Props = { editor: TiptapEditor | null }
 export function FindReplacePanel({ editor }: Props) {
   const open = useFindReplace((s) => s.open)
   const closePanel = useFindReplace((s) => s.closePanel)
-
-  const [query, setQuery] = useState('')
-  const [replacement, setReplacement] = useState('')
-  const [caseSensitive, setCaseSensitive] = useState(false)
-  const [wholeWord, setWholeWord] = useState(false)
+  const query = useFindReplace((s) => s.query)
+  const replacement = useFindReplace((s) => s.replacement)
+  const caseSensitive = useFindReplace((s) => s.caseSensitive)
+  const wholeWord = useFindReplace((s) => s.wholeWord)
+  const setQuery = useFindReplace((s) => s.setQuery)
+  const setReplacement = useFindReplace((s) => s.setReplacement)
+  const setCaseSensitive = useFindReplace((s) => s.setCaseSensitive)
+  const setWholeWord = useFindReplace((s) => s.setWholeWord)
   const [count, setCount] = useState<{ active: number | null; total: number }>({
     active: null,
     total: 0,
@@ -130,7 +133,7 @@ export function FindReplacePanel({ editor }: Props) {
       <div className="flex items-center gap-1">
         <button
           type="button"
-          onClick={() => setCaseSensitive((v) => !v)}
+          onClick={() => setCaseSensitive(!caseSensitive)}
           className={`px-2 py-0.5 text-[10px] rounded border ${
             caseSensitive ? 'border-amber-400 bg-amber-100/40 text-fg-primary' : 'border-border text-fg-muted'
           }`}
@@ -141,7 +144,7 @@ export function FindReplacePanel({ editor }: Props) {
         </button>
         <button
           type="button"
-          onClick={() => setWholeWord((v) => !v)}
+          onClick={() => setWholeWord(!wholeWord)}
           className={`px-2 py-0.5 text-[10px] rounded border ${
             wholeWord ? 'border-amber-400 bg-amber-100/40 text-fg-primary' : 'border-border text-fg-muted'
           }`}

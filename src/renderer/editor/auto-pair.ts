@@ -61,7 +61,7 @@ export const AutoPair = Extension.create({
               const selectedText = state.doc.textBetween(from, to, '')
               const tr = state.tr.delete(from, to).insertText(text + selectedText + closer, from)
               tr.setSelection(
-                TextSelection.near(tr.doc.resolve(from + selectedText.length + 1)),
+                TextSelection.near(tr.doc.resolve(from + selectedText.length + 2)),
               )
               view.dispatch(tr)
               return true
