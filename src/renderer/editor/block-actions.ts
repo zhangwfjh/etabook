@@ -3,7 +3,7 @@
 // DragHandle extension's render() and onNodeChange() hooks. Zero edits to
 // drag-handle.ts — see docs/superpowers/specs/2026-06-24-block-gutter-design.md
 
-import { Extension, type Editor } from '@tiptap/core'
+import { type Editor } from '@tiptap/core'
 import type { Node, Schema } from '@tiptap/pm/model'
 import { DOMSerializer, DOMParser } from '@tiptap/pm/model'
 import {
@@ -623,53 +623,6 @@ function fallbackWriteClipboard(data: ClipboardData): void {
   document.execCommand('copy')
 }
 
-export const BlockActionsKeymap = Extension.create({
-  name: 'blockActionsKeymap',
-
-  addKeyboardShortcuts() {
-    return {
-      'Mod-Shift-ArrowUp': () => {
-        const { from } = this.editor.state.selection
-        const preDragEditable = this.editor.isEditable
-        if (!preDragEditable) this.editor.setEditable(true)
-        moveBlockUp(this.editor, from)
-        if (!preDragEditable) this.editor.setEditable(false)
-        return true
-      },
-      'Mod-Shift-ArrowDown': () => {
-        const { from } = this.editor.state.selection
-        const preDragEditable = this.editor.isEditable
-        if (!preDragEditable) this.editor.setEditable(true)
-        moveBlockDown(this.editor, from)
-        if (!preDragEditable) this.editor.setEditable(false)
-        return true
-      },
-      'Backspace': () => {
-        const { empty, from } = this.editor.state.selection
-        if (!empty) return false
-        const $from = this.editor.state.doc.resolve(from)
-        if ($from.parentOffset !== 0) return false
-        const blockPos = $from.before(1)
-        if (blockPos <= 0) return false
-
-        const node = this.editor.state.doc.nodeAt(blockPos)
-        if (!node) return false
-
-        if (node.textContent === '') {
-          // Empty block: delete it, cursor to end of previous block.
-          const preDragEditable = this.editor.isEditable
-          if (!preDragEditable) this.editor.setEditable(true)
-          deleteBlock(this.editor, blockPos)
-          if (!preDragEditable) this.editor.setEditable(false)
-          return true
-        }
-
-        // Non-empty block at start: prevent default merge. Cursor stays.
-        return true
-      },
-    }
-  },
-})
 
 // HMR: clear module-level singletons so stale editor references don't
 // survive a hot reload and cause the black-screen crash.

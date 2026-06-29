@@ -12,7 +12,7 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { DragHandle } from './vendor/drag-handle'
-import { createBlockHandleElement, blockActionsOnNodeChange, BlockActionsKeymap } from './block-actions'
+import { createBlockHandleElement, blockActionsOnNodeChange } from './block-actions'
 import { common, createLowlight } from 'lowlight'
 import { BlockSourceEdit } from './block-source-edit'
 import { AIPlan } from './ai-plan'
@@ -82,7 +82,6 @@ export function buildExtensions() {
       // { editor, node, pos }. Cast at this unexpressible library boundary.
       onNodeChange: blockActionsOnNodeChange as unknown as () => null,
     }),
-    BlockActionsKeymap,
     SlashCommand,
     MathInline,
     MathBlock,
