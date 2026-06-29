@@ -3,7 +3,6 @@ import { useWorkspace } from '@/state/store'
 import { matchesAccelerator } from '@/lib/accelerator'
 import { useSettings } from '@/queries/settings'
 import { DEFAULT_CONFIG, type ShortcutMap } from '../../shared/ipc'
-import { useGoToLine } from '@/state/go-to-line-store'
 import { useFindReplace } from '@/state/find-replace-store'
 import { getEditor } from '@/editor/doc-registry'
 
@@ -66,13 +65,6 @@ export function useShortcuts({ onOpenSettings }: Props) {
           s.setActiveTab(g.id, g.docs[next])
           break
         }
-        case 'goToLine': {
-          const s = useWorkspace.getState()
-          const ed = s.activeFilePath ? getEditor(s.activeFilePath) : null
-          if (!ed || !ed.isEditable) break
-          useGoToLine.getState().setOpen(true)
-          break
-        }
         case 'find':
         case 'replace': {
           const ws = useWorkspace.getState()
@@ -84,6 +76,7 @@ export function useShortcuts({ onOpenSettings }: Props) {
         case 'duplicateLine':
         case 'moveLineUp':
         case 'moveLineDown':
+        case 'deleteLine':
         case 'selectNextOccurrence':
         case 'skipOccurrence':
         case 'selectAllOccurrences':
@@ -101,6 +94,9 @@ export function useShortcuts({ onOpenSettings }: Props) {
               break
             case 'moveLineDown':
               ed.commands.moveLineDown()
+              break
+            case 'deleteLine':
+              ed.commands.deleteLine()
               break
             case 'selectNextOccurrence':
               ed.commands.selectNextOccurrence()
@@ -132,8 +128,8 @@ export function useShortcuts({ onOpenSettings }: Props) {
       dispatch('closeTab', e)
       dispatch('nextTab', e)
       dispatch('prevTab', e)
-       dispatch('goToLine', e)
       dispatch('find', e)
+      dispatch('replace', e)
       dispatch('selectNextOccurrence', e)
       dispatch('skipOccurrence', e)
       dispatch('selectAllOccurrences', e)
@@ -142,6 +138,7 @@ export function useShortcuts({ onOpenSettings }: Props) {
       dispatch('duplicateLine', e)
       dispatch('moveLineUp', e)
       dispatch('moveLineDown', e)
+      dispatch('deleteLine', e)
     }
 
     window.addEventListener('keydown', onKey)

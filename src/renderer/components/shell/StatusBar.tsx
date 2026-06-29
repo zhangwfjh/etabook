@@ -22,27 +22,54 @@ export function StatusBar() {
   const currentTheme = (cfg?.theme ?? DEFAULT_CONFIG.theme) as ThemeName
   const activeFilePath = useWorkspace((s) => s.activeFilePath)
   const [counts, setCounts] = useState<{ words: number; chars: number }>({ words: 0, chars: 0 })
+  const [lineCol, setLineCol] = useState<{ line: number; col: number }>({ line: 1, col: 1 })
 
   useEffect(() => {
     if (!activeFilePath) {
       setCounts({ words: 0, chars: 0 })
+      setLineCol({ line: 1, col: 1 })
       return
     }
     const editor = getEditor(activeFilePath)
     if (!editor) {
       setCounts({ words: 0, chars: 0 })
+      setLineCol({ line: 1, col: 1 })
       return
     }
-    const read = () => {
+    const readCounts = () => {
       const storage = editor.storage.characterCount
       setCounts({
         words: storage?.words?.() ?? 0,
         chars: storage?.characters?.() ?? 0,
       })
     }
-    read()
-    editor.on('update', read)
-    return () => { editor.off('update', read) }
+    const readLineCol = () => {
+      const { selection, doc } = editor.state
+      const pos = selection.from
+      let line = 1
+      let col = 1
+      let found = false
+      doc.forEach((node, offset) => {
+        if (found) return
+        const end = offset + node.nodeSize
+        if (pos <= end) {
+          col = Math.max(1, pos - offset)
+          found = true
+        } else {
+          line++
+        }
+      })
+      if (line > doc.childCount) line = doc.childCount
+      setLineCol({ line, col })
+    }
+    readCounts()
+    readLineCol()
+    editor.on('update', readCounts)
+    editor.on('selectionUpdate', readLineCol)
+    return () => {
+      editor.off('update', readCounts)
+      editor.off('selectionUpdate', readLineCol)
+    }
   }, [activeFilePath])
 
   const cycleTheme = () => {
@@ -55,6 +82,11 @@ export function StatusBar() {
   return (
     <footer className="h-6 flex items-center gap-3 px-2 text-[11px] text-fg-subtle border-t border-border bg-bg-elevated">
       <span>{ws ?? 'No workspace'}</span>
+      {activeFilePath && (
+        <span className="tabular-nums text-fg-subtle">
+          Ln {lineCol.line}, Col {lineCol.col}
+        </span>
+      )}
       {counts.chars > 0 && (
         <span className="tabular-nums text-fg-subtle">
           {counts.words.toLocaleString()} words · {counts.chars.toLocaleString()} chars

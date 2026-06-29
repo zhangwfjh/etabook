@@ -11,9 +11,7 @@ import type { Editor as TiptapEditor } from '@tiptap/react'
 import type { JSONContent } from '@tiptap/core'
 import type { FilesWriteRes } from '../../../shared/ipc'
 import { editorRegistry, persistRegistry } from '@/editor/doc-registry'
-import { GoToLineDialog } from '@/components/editor/GoToLineDialog'
 import { FindReplacePanel } from '@/components/editor/FindReplacePanel'
-import { useGoToLine } from '@/state/go-to-line-store'
 import { useFindReplace } from '@/state/find-replace-store'
 
 type Props = {
@@ -170,8 +168,6 @@ export function DocSession({ filePath, visible }: Props) {
   // Cleanup pending snapshot timer on unmount.
   useEffect(() => () => clearTimeout(snapshotTimer.current), [])
 
-  const goToLineOpen = useGoToLine((s) => s.open)
-  const setGoToLineOpen = useGoToLine((s) => s.setOpen)
 
   // Auto-close the find/replace panel when leaving edit mode.
   useEffect(() => {
@@ -188,7 +184,7 @@ export function DocSession({ filePath, visible }: Props) {
          </div>
        </div>
       {mode === 'edit' && <FindReplacePanel editor={editor} />}
-       <GoToLineDialog open={goToLineOpen} onOpenChange={setGoToLineOpen} editor={editor} />
+
     </div>
   )
 }

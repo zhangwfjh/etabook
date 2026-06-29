@@ -72,6 +72,12 @@ export function FindReplacePanel({ editor }: Props) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [open, closePanel])
+  // Clear search highlights when the panel closes
+  useEffect(() => {
+    if (open) return
+    if (!editor) return
+    editor.commands.setSearchQuery('')
+  }, [open, editor])
 
   if (!open) return null
 

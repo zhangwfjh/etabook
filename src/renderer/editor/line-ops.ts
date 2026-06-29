@@ -93,6 +93,30 @@ export const LineOps = Extension.create({
           if (dispatch) dispatch(tr)
           return true
         },
+
+      deleteLine:
+        () =>
+        ({ editor, tr, state, dispatch }) => {
+          if (!editor.isEditable) return false
+          const { selection, doc } = state
+          const blockPos = resolveTopLevelBlockPos(editor, selection.from)
+          const blockNode = doc.nodeAt(blockPos)
+          if (!blockNode) return false
+          const blockEnd = blockPos + blockNode.nodeSize
+          const docSize = doc.content.size
+          if (doc.childCount <= 1) {
+            // Last block: clear its content to an empty paragraph instead of deleting.
+            tr.delete(0, docSize)
+            tr.insert(0, state.schema.nodes.paragraph.create())
+            tr.setSelection(TextSelection.near(tr.doc.resolve(1)))
+          } else {
+            tr.delete(blockPos, blockEnd)
+            const newPos = Math.min(blockPos, tr.doc.content.size - 1)
+            tr.setSelection(TextSelection.near(tr.doc.resolve(Math.max(1, newPos))))
+          }
+          if (dispatch) dispatch(tr)
+          return true
+        },
     }
   },
 })
@@ -103,6 +127,7 @@ declare module '@tiptap/core' {
       duplicateLine: () => ReturnType
       moveLineUp: () => ReturnType
       moveLineDown: () => ReturnType
+      deleteLine: () => ReturnType
     }
   }
 }

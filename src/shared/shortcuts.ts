@@ -30,12 +30,12 @@ export const SHORTCUT_ACTIONS = [
   'duplicateLine',
   'moveLineUp',
   'moveLineDown',
+  'deleteLine',
   'selectNextOccurrence',
   'skipOccurrence',
   'selectAllOccurrences',
   'addCursorAbove',
   'addCursorBelow',
-  'goToLine',
 ] as const
 
 export type ShortcutAction = (typeof SHORTCUT_ACTIONS)[number]
@@ -63,12 +63,12 @@ export const SHORTCUT_LABELS: Record<ShortcutAction, string> = {
   duplicateLine: 'Duplicate line',
   moveLineUp: 'Move line up',
   moveLineDown: 'Move line down',
+  deleteLine: 'Delete line',
   selectNextOccurrence: 'Select next occurrence',
   skipOccurrence: 'Skip occurrence',
   selectAllOccurrences: 'Select all occurrences',
   addCursorAbove: 'Add cursor above',
   addCursorBelow: 'Add cursor below',
-  goToLine: 'Go to line',
 }
 export const DEFAULT_SHORTCUTS: ShortcutMap = {
   toggleSidebar: 'CmdOrCtrl+B',
@@ -86,12 +86,12 @@ export const DEFAULT_SHORTCUTS: ShortcutMap = {
   duplicateLine: 'Alt+Shift+Down',
   moveLineUp: 'Alt+Up',
   moveLineDown: 'Alt+Down',
+  deleteLine: 'CmdOrCtrl+K',
   selectNextOccurrence: 'CmdOrCtrl+D',
-  skipOccurrence: 'CmdOrCtrl+K',
+  skipOccurrence: 'CmdOrCtrl+Alt+K',
   selectAllOccurrences: 'CmdOrCtrl+Shift+L',
   addCursorAbove: 'CmdOrCtrl+Alt+Up',
   addCursorBelow: 'CmdOrCtrl+Alt+Down',
-  goToLine: 'CmdOrCtrl+G',
 }
 
 // --- accelerator parsing -----------------------------------------------------

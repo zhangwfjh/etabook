@@ -20,7 +20,7 @@ describe('editor feature shortcuts', () => {
     'selectAllOccurrences',
     'addCursorAbove',
     'addCursorBelow',
-    'goToLine',
+    'deleteLine',
   ]
 
   it('every editor action is registered', () => {
