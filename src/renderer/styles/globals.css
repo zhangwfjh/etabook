@@ -860,3 +860,24 @@ body::before {
   border-radius: 2px;
 }
 @keyframes mc-blink { to { visibility: hidden; } }
+
+/* ── OFM marks: highlight, comment ──────────────────────────────────── */
+
+.etabook-editor mark.etabook-highlight {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: 3px;
+  padding: 0.05em 0.15em;
+  color: inherit;
+}
+
+/* Comment: hidden in view mode, faint inline in edit mode.
+   data-editable is synced by the EditableAttr extension. */
+.etabook-editor[data-editable="false"] .etabook-comment {
+  display: none;
+}
+.etabook-editor[data-editable="true"] .etabook-comment {
+  opacity: 0.45;
+  border-bottom: 1px dotted var(--border);
+  border-radius: 0;
+}
+

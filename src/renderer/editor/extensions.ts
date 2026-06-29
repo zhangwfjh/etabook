@@ -19,6 +19,9 @@ import { AIPlan } from './ai-plan'
 import { Callout } from './callout'
 import { SlashCommand } from './slash-command'
 import { MathInline, MathBlock } from './math'
+import { Highlight } from './highlight'
+import { Comment } from './comment'
+import { EditableAttr } from './editable-attr'
 import { CodeBlockNodeView } from './code-block-view'
 import { TrailingNode } from './trailing-node'
 import { AutoPair } from './auto-pair'
@@ -52,6 +55,7 @@ export function buildExtensions() {
       // doc-changing transactions.
       trailingNode: false,
     }),
+    EditableAttr,
     CharacterCount,
     AutoPair,
     LineOps,
@@ -66,6 +70,8 @@ export function buildExtensions() {
       },
     }),
     PreservingCode,
+    Highlight,
+    Comment,
     Link.configure({ openOnClick: false, autolink: true }),
     Image,
     Table.configure({ resizable: true }),

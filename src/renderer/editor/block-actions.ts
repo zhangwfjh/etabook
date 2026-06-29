@@ -17,6 +17,7 @@ import React from 'react'
 import { toast } from 'sonner'
 import { useWorkspace } from '@/state/store'
 import { BlockActionsMenu } from './BlockActionsMenu'
+import { getMarkdownManager } from './markdown-manager'
 
 // Shape the vendored plugin delivers to onNodeChange(): { editor, node, pos }.
 // node is null and pos is -1 when the gutter leaves a block.
@@ -343,6 +344,26 @@ export function deserializeBlockFromClipboard(
       // fall through to HTML
     }
   }
+  // Prefer plain text parsed as markdown. This editor's canonical format is
+  // markdown, and copying from external sources (rendered pages, code blocks,
+  // other editors) always includes text/html alongside text/plain — but that
+  // HTML is just literal characters for constructs like ==highlights== or
+  // fenced code, so DOM-parsing it would lose the syntax. Parsing the plain
+  // text as markdown recovers the real node structure (the same path the file
+  // loader uses). Falls back to a literal paragraph if parsing yields nothing.
+  const plain = data['text/plain']
+  if (plain) {
+    const mgr = getMarkdownManager()
+    const parsed = mgr.parse(plain)
+    if (parsed?.content && parsed.content.length > 0) {
+      const first = parsed.content[0]
+      try {
+        return schema.nodeFromJSON(first)
+      } catch {
+        // fall through to HTML / literal text
+      }
+    }
+  }
   const html = data['text/html']
   if (html) {
     try {
@@ -351,10 +372,9 @@ export function deserializeBlockFromClipboard(
       const parsed = DOMParser.fromSchema(schema).parse(wrapper)
       if (parsed.childCount > 0) return parsed.child(0)
     } catch {
-      // fall through to plain text
+      // fall through to literal text
     }
   }
-  const plain = data['text/plain']
   if (plain) {
     return schema.nodes.paragraph.create(null, plain ? schema.text(plain) : null)
   }
