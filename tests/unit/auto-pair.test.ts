@@ -44,11 +44,21 @@ describe('AutoPair — auto-close', () => {
     expect(getText(editor)).toBe(open + closer)
   })
 
-  it.each(["'", '"', '`'])('auto-closes quote %s', (q) => {
+  it.each(["'", '"'])('auto-closes quote %s', (q) => {
     const editor = makeEditor()
     setCursor(editor, 1)
     insertText(editor, q)
     expect(getText(editor)).toBe(q + q)
+    expect(editor.state.selection.from).toBe(2)
+  })
+
+  it('does NOT auto-close backtick (so code fences can be typed)', () => {
+    const editor = makeEditor()
+    setCursor(editor, 1)
+    insertText(editor, '`')
+    // A single literal backtick — pairing would turn ``` into four backticks
+    // and break code-fence creation.
+    expect(getText(editor)).toBe('`')
     expect(editor.state.selection.from).toBe(2)
   })
 })

@@ -11,6 +11,13 @@
  *   4. Backspace-delete-pair: pressing Backspace with the caret between an
  *      empty pair (opener+closer, nothing inside) deletes both.
  *
+ * Note on backticks: `` ` `` is intentionally NOT paired. Backticks build
+ * code fences (```` ``` ````) and the code-block input rule / Enter handler
+ * need them inserted literally; auto-pairing would turn ``` into four
+ * backticks and break fence creation. Typing backticks also never creates a
+ * real inline-`code` mark (there is no such input rule), so pairing them
+ * only ever inserted literal characters anyway.
+ *
  * Suppression rules:
  *   - Disabled entirely inside AI-plan (`aiPlan`) and inline-math
  *     (`mathInline` mark) contexts — those nodes manage their own input.
@@ -29,10 +36,9 @@ const PAIRS: Record<string, string> = {
   '{': '}',
   "'": "'",
   '"': '"',
-  '`': '`',
 }
 
-const QUOTE_OPENS: Record<string, true> = { "'": true, '"': true, '`': true }
+const QUOTE_OPENS: Record<string, true> = { "'": true, '"': true }
 // The set of closers (PAIRS values). Used to gate skip-over so an OPENER
 // next to an identical char still auto-closes (lets you nest brackets).
 const CLOSERS: Record<string, true> = Object.values(PAIRS).reduce(

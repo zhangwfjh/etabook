@@ -119,6 +119,16 @@ body {
   font-style: italic;
 }
 
+/* Edit mode: render the `>` markdown prefix on each paragraph inside a
+   blockquote so the user sees (and understands) the quote source syntax.
+   View mode keeps the clean border-left rendering. */
+.etabook-editor[data-editable="true"] blockquote > p::before {
+  content: "> ";
+  color: var(--accent);
+  font-style: normal;
+  font-weight: 600;
+}
+
 /* ── OFM callouts (`> [!type] title`) ──────────────────────────────── */
 .etabook-editor aside[data-callout] {
   --callout-color: var(--callout-note);            /* overridden inline by NodeView */
@@ -154,11 +164,35 @@ body {
 .etabook-editor aside[data-callout] > .callout-header .callout-type {
   text-transform: capitalize;
   white-space: nowrap;
+  /* Type carries the callout's accent color; the title stays primary. */
+  color: var(--callout-color);
 }
 
+/* Space between the type label and the title. */
 .etabook-editor aside[data-callout] > .callout-header .callout-title {
+  color: var(--fg-primary);
+  margin-left: 0.5em;
+}
+
+/* Field container: wraps static label + raw input. The input is ALWAYS
+   present (never display:none) so it can receive focus. When not focused it
+   is invisible (opacity:0) and absolutely positioned over the static label,
+   so clicking the header area clicks through to the input → focuses it.
+   When focused, the input becomes visible and the static hides. */
+.etabook-editor aside[data-callout] > .callout-header .callout-header-field {
   flex: 1;
   min-width: 0;
+  position: relative;
+}
+.etabook-editor aside[data-callout] > .callout-header .callout-header-static {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.etabook-editor aside[data-callout] > .callout-header .callout-header-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
   border: none;
   background: transparent;
   outline: none;
@@ -166,11 +200,41 @@ body {
   font: inherit;
   font-weight: 600;
   padding: 0;
+  opacity: 0;
+}
+/* Edit mode + focused → input visible, static hidden. */
+.etabook-editor[data-editable="true"] aside[data-callout] > .callout-header.is-focused .callout-header-input {
+  position: relative;
+  opacity: 1;
+}
+.etabook-editor[data-editable="true"] aside[data-callout] > .callout-header.is-focused .callout-header-static {
+  display: none;
+}
+/* View mode: input never interactive. */
+.etabook-editor[data-editable="false"] aside[data-callout] > .callout-header .callout-header-input {
+  pointer-events: none;
 }
 
-.etabook-editor aside[data-callout] > .callout-header .callout-title::placeholder {
-  color: var(--fg-subtle);
-  font-weight: 400;
+/* Remove-callout button: edit mode only. Unwraps the callout to its body. */
+.etabook-editor aside[data-callout] > .callout-header .callout-remove {
+  display: none;
+  flex-shrink: 0;
+  padding: 2px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--fg-muted);
+  cursor: pointer;
+  line-height: 0;
+}
+.etabook-editor[data-editable="true"] aside[data-callout] > .callout-header .callout-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.etabook-editor aside[data-callout] > .callout-header .callout-remove:hover {
+  background-color: var(--bg-subtle);
+  color: var(--fg-primary);
 }
 
 .etabook-editor aside[data-callout][data-math] > .callout-header {
@@ -532,11 +596,90 @@ body {
   background-color: var(--bg-subtle);
   border: 1px solid var(--border);
   border-radius: var(--radius-default);
-  padding: 0.75em 1em;
   margin-bottom: 0.75em;
   overflow-x: auto;
   font-size: 0.9em;
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+  padding: 0.75em 1em;
+}
+
+/* Edit-mode layout: container is a <div> holding a header bar + an inner
+   <pre>. Horizontal scrolling lives on the <pre>, not the container, so a
+   wide code line scrolls without dragging the header out of view. */
+.etabook-editor .etabook-code-block--edit {
+  padding: 0;
+  overflow: visible;
+}
+
+.etabook-editor .etabook-code-block-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 0.3em 0.75em;
+  /* Reserve room on the right so the lang input/label doesn't underlap the
+     absolute hover copy button (top-right of the container). */
+  padding-right: 2.25em;
+  border-bottom: 1px solid var(--border);
+  background-color: var(--bg-elevated);
+  border-top-left-radius: var(--radius-default);
+  border-top-right-radius: var(--radius-default);
+}
+
+/* Header visibility: hide header bar when empty AND not focused (no language,
+   no caret) to avoid an empty bar. */
+.etabook-editor[data-editable="true"] .etabook-code-block-header:not(.is-focused).etabook-code-block-header--empty {
+  display: none;
+}
+
+.etabook-editor .etabook-code-lang {
+  min-width: 0;
+  color: var(--fg-muted);
+  font: inherit;
+}
+
+/* Field container: same overlay model as the callout header. The input is
+   always present (never display:none) but invisible when not focused, so
+   clicking the header focuses it. */
+.etabook-editor .etabook-code-block-field {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+.etabook-editor .etabook-code-lang--edit {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: 0;
+  opacity: 0;
+}
+.etabook-editor .etabook-code-lang--static {
+  text-transform: lowercase;
+}
+/* Edit mode + focused → input visible, static hidden. */
+.etabook-editor[data-editable="true"] .etabook-code-block-header.is-focused .etabook-code-lang--edit {
+  position: relative;
+  opacity: 1;
+}
+.etabook-editor[data-editable="true"] .etabook-code-block-header.is-focused .etabook-code-lang--static {
+  display: none;
+}
+/* View mode: input never interactive. */
+.etabook-editor[data-editable="false"] .etabook-code-lang--edit {
+  pointer-events: none;
+}
+.etabook-editor .etabook-code-lang--edit::placeholder {
+  color: var(--fg-subtle);
+  font-style: italic;
+}
+
+.etabook-editor .etabook-code-block-pre {
+  margin: 0;
+  padding: 0.75em 1em;
+  white-space: pre;
+  overflow-x: auto;
 }
 
 .etabook-editor .etabook-code-copy {

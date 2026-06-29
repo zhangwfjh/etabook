@@ -16,6 +16,7 @@
 
 import type { JSONContent, MarkdownToken } from '@tiptap/core'
 import { textblockTypeInputRule } from '@tiptap/core'
+import { TextSelection } from '@tiptap/pm/state'
 import { Code as BaseCode } from '@tiptap/extension-code'
 import { CodeBlockLowlight as BaseCodeBlockLowlight } from '@tiptap/extension-code-block-lowlight'
 
@@ -160,6 +161,40 @@ export const CodeBlock = BaseCodeBlockLowlight.extend({
         }),
       }),
     ]
+  },
+
+  addKeyboardShortcuts() {
+    // Typing a fence opener (``` or ~~~, optionally followed by a language)
+    // then pressing Enter converts the paragraph into an empty fenced code
+    // block. This complements the space-triggered input rule above, which
+    // handles ``` + <space>. The fence length and character are preserved.
+    return {
+      Enter: () => {
+        const editor = this.editor
+        const { state, view } = editor
+        const { selection } = state
+        if (!selection.empty) return false
+        const $from = selection.$from
+        const parent = $from.parent
+        if (!parent || parent.type.name !== 'paragraph') return false
+        const match = /^(`{3,}|~{3,})([a-zA-Z0-9+#.-]*)?\s*$/.exec(parent.textContent)
+        if (!match) return false
+        const fenceChar = match[1][0] === TILDE ? TILDE : BACKTICK
+        const fenceLength = match[1].length
+        const language = match[2] || null
+        const start = $from.before(1)
+        const end = start + parent.nodeSize
+        const codeBlock = state.schema.nodes.codeBlock.create({
+          language,
+          fenceChar,
+          fenceLength,
+        })
+        const tr = state.tr.replaceWith(start, end, codeBlock)
+        tr.setSelection(TextSelection.near(tr.doc.resolve(start + 1)))
+        view.dispatch(tr)
+        return true
+      },
+    }
   },
 })
 

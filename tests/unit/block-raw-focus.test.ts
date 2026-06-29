@@ -73,6 +73,16 @@ describe('BlockRawFocus', () => {
     expect(hasRawFocus(editor)).toBe(false)
   })
 
+  it('does not swap a plain paragraph that only contains a literal backtick', () => {
+    // A lone backtick is literal text (no code mark). The serializer escapes
+    // it to `\``, which used to make md !== textContent and trigger a spurious
+    // swap that showed the escaped form. Marks-based detection must skip it.
+    makeEditor('`\n\nplain paragraph')
+    placeCaret(1)
+    expect(editor.state.doc.child(0).textContent).toBe('`')
+    expect(hasRawFocus(editor)).toBe(false)
+  })
+
   it('restores the rendered form when the caret moves to another block', () => {
     makeEditor('**bold**\n\nplain')
     // Enter the bold block -> raw.

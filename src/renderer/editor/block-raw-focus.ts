@@ -25,6 +25,7 @@ import { Extension } from '@tiptap/core'
 import type { Editor, JSONContent } from '@tiptap/core'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
+import type { Node as PmNode } from '@tiptap/pm/model'
 import { getMarkdownManager } from './markdown-manager'
 
 const key = new PluginKey('blockRawFocus')
@@ -37,6 +38,40 @@ export const RAW_FOCUS_META = 'rawFocusSwap'
 // structures (tables, code blocks, math, ai-plan, images) manage their own
 // surfaces and never raw-swap.
 const RAWABLE: ReadonlySet<string> = new Set(['paragraph', 'heading'])
+
+/**
+ * Whether `node` carries inline markup worth exposing as editable markdown
+ * source when the caret enters it.
+ *
+ * Headings always qualify (their `#` level prefix is the exposed source).
+ * Paragraphs qualify only when they contain at least one marked text run or
+ * an inline node such as an image — i.e. there is hidden markup to reveal.
+ *
+ * A *plain* paragraph whose text merely happens to contain characters the
+ * serializer escapes (e.g. a literal backtick `` ` `` → `` \` ``) must NOT
+ * qualify: there is no mark to expose, and swapping would replace the user's
+ * text with its escaped form (the stray `\` bug). Comparing serialized
+ * markdown to `textContent` is unreliable for exactly this reason, so we
+ * inspect marks directly.
+ */
+function hasExposedMarkup(node: {
+  type: { name: string }
+  forEach: (cb: (child: PmNode) => void) => void
+}): boolean {
+  if (node.type.name === 'heading') return true
+  let found = false
+  node.forEach((child) => {
+    if (found) return
+    if (child.isText) {
+      if (child.marks.length > 0) found = true
+    } else if (child.type.name !== 'hardBreak') {
+      // An inline node (image, etc.) — its `![alt](url)` syntax is the
+      // exposed source. hardBreak is not meaningful markup to edit.
+      found = true
+    }
+  })
+  return found
+}
 
 type RawState = { rawFrom: number | null }
 
@@ -112,12 +147,15 @@ export const BlockRawFocus = Extension.create({
       if ($pos.depth < 1) return
       const node = $pos.node(1)
       if (!node || !RAWABLE.has(node.type.name)) return
+      // Only swap when there is inline markup to expose. A plain paragraph
+      // (no marks, no inline nodes) has nothing to reveal — and its text may
+      // contain syntax chars the serializer would escape, so swapping would
+      // corrupt the visible text (the stray `\` bug). See hasExposedMarkup.
+      if (!hasExposedMarkup(node)) return
       const mgr = getMarkdownManager()
       const mdRaw = mgr.serialize({ type: 'doc', content: [node.toJSON()] } as JSONContent)
       if (mdRaw == null) return
       const md = mdRaw.replace(/\n+$/, '')
-      // Plain paragraph with no marks: source === text, nothing to expose.
-      if (node.type.name === 'paragraph' && md === node.textContent) return
       const schema = view.state.schema
       const textNode = md.length > 0 ? schema.text(md) : null
       const para = schema.nodes.paragraph.create(null, textNode)
