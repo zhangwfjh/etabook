@@ -33,8 +33,7 @@ import {
   type Transaction,
 } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
-import { ReplaceStep, type Mappable } from '@tiptap/pm/transform'
-import { isHistoryTransaction } from '@tiptap/pm/history'
+import type { Mappable } from '@tiptap/pm/transform'
 import { Slice, type Node as PmNode, type ResolvedPos } from '@tiptap/pm/model'
 
 const multiCursorKey = new PluginKey<null>('multiCursor')
@@ -193,21 +192,34 @@ Selection.jsonID('multicursor', MultiCursorSelection)
 // Occurrence helpers
 // ---------------------------------------------------------------------------
 
-/** Every (case-sensitive) occurrence of `text` in the doc, as ranges. */
+/** Every occurrence of `text` in the doc as ranges.
+ *  Respects case-sensitivity and whole-word options from the search panel. */
 function findAllOccurrences(doc: PmNode, text: string): MCRange[] {
   const out: MCRange[] = []
   if (!text) return out
+  const caseSensitive = _mcSearchSettings.caseSensitive
+  const wholeWord = _mcSearchSettings.wholeWord
+  const needle = caseSensitive ? text : text.toLowerCase()
   doc.nodesBetween(0, doc.content.size, (node, pos) => {
     if (!node.isText || !node.text) return
-    const str = node.text
+    const str = caseSensitive ? node.text : node.text.toLowerCase()
     let idx = 0
-    while ((idx = str.indexOf(text, idx)) !== -1) {
+    while ((idx = str.indexOf(needle, idx)) !== -1) {
+      if (wholeWord) {
+        const before = idx === 0 || !/\w/.test(str[idx - 1])
+        const after = idx + needle.length >= str.length || !/\w/.test(str[idx + needle.length])
+        if (!before || !after) { idx += needle.length; continue }
+      }
       out.push({ from: pos + idx, to: pos + idx + text.length })
-      idx += text.length
+      idx += needle.length
     }
   })
   return out
 }
+
+// Module-level search settings, updated by selectNextOccurrence/selectAllOccurrences
+// from the editor's search storage before calling findAllOccurrences.
+const _mcSearchSettings = { caseSensitive: false, wholeWord: false }
 
 const rangeKey = (r: MCRange): string => `${r.from}:${r.to}`
 
@@ -265,96 +277,6 @@ function dedupeRanges(ranges: MCRange[]): MCRange[] {
   return out
 }
 
-// ---------------------------------------------------------------------------
-// Fan-out
-// ---------------------------------------------------------------------------
-
-/**
- * When a `MultiCursorSelection` is active and a doc-changing transaction
- * arrives, replay the primary edit at every other caret (reverse positional
- * order) in a single appended transaction — one undo step. Falls back to null
- * (no-op) when there's nothing to fan out or the edit isn't a recognizable
- * replace.
- */
-function fanOutEdit(
-  transactions: readonly Transaction[],
-  oldState: EditorState,
-  newState: EditorState,
-): Transaction | null {
-  // Editing commands (insertContent, deleteSelection, …) typically replace the
-  // PRIMARY range and then RESET the selection to a TextSelection — so by the
-  // time we see `newState`, the MultiCursorSelection is gone. Detect multi-
-  // cursor from `oldState.selection` instead, replay the same edit at every
-  // other caret, then restore a MultiCursorSelection over all the new carets.
-  const oldSel = oldState.selection
-  if (!(oldSel instanceof MultiCursorSelection) || oldSel.ranges.length < 2) {
-    return null
-  }
-
-  const last = transactions[transactions.length - 1]
-  if (!last || !last.docChanged || last.getMeta('mcFanout')) return null
-  // Never fan out undo/redo — those already invert the whole multi-cursor
-  // edit as one history event; replaying them at the secondary carets would
-  // corrupt the document.
-  if (isHistoryTransaction(last)) return null
-
-  // Collect the replace steps that constitute the primary edit.
-  const replaceSteps: ReplaceStep[] = []
-  for (const step of last.steps) {
-    if (step instanceof ReplaceStep) replaceSteps.push(step)
-  }
-  if (replaceSteps.length === 0) return null
-  const sliceSize = replaceSteps.reduce((n, s) => n + s.slice.size, 0)
-
-  const tr = newState.tr
-  // Non-primary OLD ranges, mapped through the primary edit so they point at
-  // the corresponding text in the new doc. Highest position first: appending a
-  // step at a higher offset doesn't invalidate lower offsets.
-  const others = oldSel.ranges
-    .map((r, i) => ({ r, i }))
-    .filter((o) => o.i !== oldSel.primaryIndex)
-    .sort((a, b) => last.mapping.map(b.r.from) - last.mapping.map(a.r.from))
-
-  let didAny = false
-  const replayed: { index: number; midFrom: number }[] = []
-  for (const o of others) {
-    const midFrom = last.mapping.map(o.r.from, 1)
-    const midTo = last.mapping.map(o.r.to, -1)
-    for (const step of replaceSteps) {
-      try {
-        const replay = new ReplaceStep(midFrom, midTo, step.slice)
-        const result = replay.apply(tr.doc)
-        if (result.failed) continue
-        tr.step(replay)
-        replayed.push({ index: o.i, midFrom })
-        didAny = true
-        break
-      } catch {
-        // Graceful degradation: skip a range we can't replay into.
-      }
-    }
-  }
-  if (!didAny) return null
-
-  // Restore a MultiCursorSelection spanning every caret. Primary caret = where
-  // the editing command left the (Text)Selection; each secondary caret = end
-  // of its replayed insertion, mapped through the fan-out transaction.
-  const newRanges: MCRange[] = oldSel.ranges.map((r, i) => {
-    if (i === oldSel.primaryIndex) {
-      return { from: newState.selection.from, to: newState.selection.to }
-    }
-    const rec = replayed.find((p) => p.index === i)
-    const midFrom = rec ? rec.midFrom : last.mapping.map(r.from, 1)
-    const pos = tr.mapping.map(midFrom, 1) + sliceSize
-    return { from: pos, to: pos }
-  })
-  const restored = MultiCursorSelection.create(tr.doc, newRanges, oldSel.primaryIndex)
-  tr.setSelection(restored)
-
-  tr.setMeta(multiCursorKey, { fanout: true })
-  tr.setMeta('mcFanout', true)
-  return tr
-}
 
 // ---------------------------------------------------------------------------
 // Extension
@@ -370,6 +292,8 @@ export const MultiCursor = Extension.create({
         ({ editor, state, dispatch }) => {
           if (!editor.isEditable) return false
           const { selection, doc } = state
+          const ss = editor.storage.search?.state
+          if (ss) { _mcSearchSettings.caseSensitive = ss.caseSensitive; _mcSearchSettings.wholeWord = ss.wholeWord }
           // Empty caret (not multi-cursor): the FIRST Ctrl+D selects the word
           // under the cursor (no multi-cursor yet). The next Ctrl+D, now over
           // a non-empty selection, finds and appends the next occurrence as a
@@ -397,13 +321,11 @@ export const MultiCursor = Extension.create({
             taken = [{ from: selection.from, to: selection.to }]
             searchFrom = selection.to
           }
-
           const match = findNextOccurrence(doc, text, searchFrom, taken)
           if (!match) return false
-
           const ranges = [...taken, match]
           const sel = MultiCursorSelection.create(doc, ranges, ranges.length - 1)
-          if (dispatch) dispatch(state.tr.setSelection(sel))
+          if (dispatch) dispatch(state.tr.setSelection(sel).scrollIntoView())
           return true
         },
 
@@ -450,6 +372,8 @@ export const MultiCursor = Extension.create({
         () =>
         ({ editor, state, dispatch }) => {
           if (!editor.isEditable) return false
+          const ss2 = editor.storage.search?.state
+          if (ss2) { _mcSearchSettings.caseSensitive = ss2.caseSensitive; _mcSearchSettings.wholeWord = ss2.wholeWord }
           const { selection, doc } = state
           const text = doc.textBetween(selection.from, selection.to, ' ')
           if (!text) return false
@@ -581,6 +505,44 @@ export const MultiCursor = Extension.create({
               return false
             }
 
+            // Backspace with multiple carets: delete at ALL carets.
+            if (event.key === 'Backspace' && !event.shiftKey && !event.ctrlKey && !event.metaKey) {
+              const sel = view.state.selection
+              if (!(sel instanceof MultiCursorSelection) || !sel.isMultiCursor) return false
+              const ranges = sel.ranges
+              const tr = view.state.tr
+              const order = [...Array(ranges.length).keys()].sort((a, b) => ranges[b].from - ranges[a].from)
+              const deleted: number[] = new Array(ranges.length).fill(0)
+              for (const idx of order) {
+                const r = ranges[idx]
+                if (r.from < 1) continue
+                if (r.from === r.to) {
+                  tr.delete(r.from - 1, r.from)
+                  deleted[idx] = 1
+                } else {
+                  tr.delete(r.from, r.to)
+                  deleted[idx] = r.to - r.from
+                }
+              }
+              const newRanges: MCRange[] = ranges.map((r, i) => {
+                const lowerDeleted = ranges
+                  .filter((_o, j) => j !== i && ranges[j].from < r.from)
+                  .reduce((sum, _other, j) => sum + deleted[j], 0)
+                const pos = Math.max(0, r.from - deleted[i] - lowerDeleted)
+                return { from: pos, to: pos }
+              })
+              const merged = dedupeRanges(newRanges)
+              if (merged.length <= 1) {
+                const r = merged[0] ?? newRanges[sel.primaryIndex]
+                tr.setSelection(TextSelection.create(tr.doc, r.from, r.to))
+              } else {
+                tr.setSelection(MultiCursorSelection.create(tr.doc, merged, Math.min(sel.primaryIndex, merged.length - 1)))
+              }
+              view.dispatch(tr)
+              event.preventDefault()
+              return true
+            }
+
             // Arrow keys move EVERY caret together while in multi-cursor mode.
             // Collisions (two carets landing on the same spot) are merged, and
             // if only one caret remains we drop back to a TextSelection.
@@ -645,9 +607,32 @@ export const MultiCursor = Extension.create({
             }
             return true
           },
-        },
-        appendTransaction(transactions, oldState, newState) {
-          return fanOutEdit(transactions, oldState, newState)
+
+          // Multi-cursor text input: intercept BEFORE ProseMirror handles it.
+          // Apply the same text insertion at ALL carets in one transaction.
+          handleTextInput(view, _from, _to, text) {
+            if (!view.editable) return false
+            const sel = view.state.selection
+            if (!(sel instanceof MultiCursorSelection) || !sel.isMultiCursor) return false
+            const ranges = sel.ranges
+            const t = text.length
+            const tr = view.state.tr
+            const order = [...Array(ranges.length).keys()].sort((a, b) => ranges[b].from - ranges[a].from)
+            for (const idx of order) {
+              const r = ranges[idx]
+              tr.insertText(text, r.from, r.to)
+            }
+            const newRanges: MCRange[] = ranges.map((r, i) => {
+              const lowerShift = ranges
+                .filter((_o, j) => j !== i && ranges[j].from < r.from)
+                .reduce((sum, other) => sum + (t - (other.to - other.from)), 0)
+              const pos = r.from + t + lowerShift
+              return { from: pos, to: pos }
+            })
+            tr.setSelection(MultiCursorSelection.create(tr.doc, newRanges, sel.primaryIndex))
+            view.dispatch(tr)
+            return true
+          },
         },
       }),
     ]

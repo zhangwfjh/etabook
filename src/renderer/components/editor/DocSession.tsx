@@ -183,7 +183,7 @@ export function DocSession({ filePath, visible }: Props) {
            )}
          </div>
        </div>
-      {mode === 'edit' && <FindReplacePanel editor={editor} />}
+      <FindReplacePanel editor={editor} />
 
     </div>
   )

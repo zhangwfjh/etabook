@@ -65,7 +65,13 @@ export function useShortcuts({ onOpenSettings }: Props) {
           s.setActiveTab(g.id, g.docs[next])
           break
         }
-        case 'find':
+        case 'find': {
+          const ws = useWorkspace.getState()
+          const ed = ws.activeFilePath ? getEditor(ws.activeFilePath) : null
+          if (!ed) break
+          useFindReplace.getState().openPanel()
+          break
+        }
         case 'replace': {
           const ws = useWorkspace.getState()
           const ed = ws.activeFilePath ? getEditor(ws.activeFilePath) : null

@@ -21,7 +21,8 @@ export function FindReplacePanel({ editor }: Props) {
     total: 0,
   })
 
-  // Sync local state -> search extension commands
+  const canReplace = !!editor && editor.isEditable && count.total > 0
+
   useEffect(() => {
     if (!editor || !open) return
     editor.commands.setSearchQuery(query)
@@ -37,7 +38,6 @@ export function FindReplacePanel({ editor }: Props) {
     editor.commands.setSearchOptions({ caseSensitive, wholeWord })
   }, [editor, open, caseSensitive, wholeWord])
 
-  // Read match count from editor storage on every transaction
   useEffect(() => {
     if (!editor || !open) return
     const read = () => {
@@ -50,7 +50,6 @@ export function FindReplacePanel({ editor }: Props) {
     return () => { editor.off('transaction', read) }
   }, [editor, open])
 
-  // On open, seed query from the current text selection
   useEffect(() => {
     if (!editor || !open) return
     const { selection } = editor.state
@@ -60,18 +59,26 @@ export function FindReplacePanel({ editor }: Props) {
     }
   }, [editor, open])
 
-  // Esc closes the panel
+  // Esc closes the panel and moves cursor to the active match
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault()
+        if (editor) {
+          const s = editor.storage.search?.state
+          if (s && s.matches.length > 0 && s.activeIndex !== null) {
+            const m = s.matches[s.activeIndex]
+            editor.chain().focus().setTextSelection({ from: m.from, to: m.to }).run()
+          }
+        }
         closePanel()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [open, closePanel])
+  }, [open, closePanel, editor])
+
   // Clear search highlights when the panel closes
   useEffect(() => {
     if (open) return
@@ -122,20 +129,22 @@ export function FindReplacePanel({ editor }: Props) {
           <X size={14} />
         </button>
       </form>
-      <div className="flex items-center gap-1">
-        <input
-          className="flex-1 px-2 py-1 text-xs rounded border border-border bg-bg-primary focus:outline-none focus:border-amber-400"
-          placeholder="Replace"
-          value={replacement}
-          onChange={(e) => setReplacement(e.target.value)}
-        />
-        <button type="button" onClick={replace} disabled={count.total === 0} className="px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-subtle text-fg-muted disabled:opacity-30" title="Replace">
-          Replace
-        </button>
-        <button type="button" onClick={replaceAll} disabled={count.total === 0} className="px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-subtle text-fg-muted disabled:opacity-30" title="Replace all">
-          All
-        </button>
-      </div>
+      {editor?.isEditable && (
+        <div className="flex items-center gap-1">
+          <input
+            className="flex-1 px-2 py-1 text-xs rounded border border-border bg-bg-primary focus:outline-none focus:border-amber-400"
+            placeholder="Replace"
+            value={replacement}
+            onChange={(e) => setReplacement(e.target.value)}
+          />
+          <button type="button" onClick={replace} disabled={!canReplace} className="px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-subtle text-fg-muted disabled:opacity-30" title="Replace">
+            Replace
+          </button>
+          <button type="button" onClick={replaceAll} disabled={!canReplace} className="px-2 py-1 text-[10px] rounded border border-border hover:bg-bg-subtle text-fg-muted disabled:opacity-30" title="Replace all">
+            All
+          </button>
+        </div>
+      )}
       <div className="flex items-center gap-1">
         <button
           type="button"
