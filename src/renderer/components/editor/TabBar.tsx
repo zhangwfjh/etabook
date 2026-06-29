@@ -97,15 +97,28 @@ export function TabBar({ group, focused }: Props) {
           >
             <span className="truncate max-w-[160px]">{basename(path)}</span>
             {dirty ? (
-              <span
-                className="size-[7px] rounded-full bg-accent shrink-0"
-                aria-label="unsaved"
-              />
+              <>
+                <span
+                  className="size-[7px] rounded-full bg-accent shrink-0"
+                  aria-label="unsaved"
+                />
+                <button
+                  type="button"
+                  onClick={(e) => handleClose(e, path)}
+                  className={cn(
+                    'size-[15px] grid place-items-center rounded-sm text-fg-subtle hover:bg-bg-subtle shrink-0',
+                    active ? 'grid' : 'hidden group-hover:grid',
+                  )}
+                  aria-label={`Close ${basename(path)}`}
+                >
+                  <X className="size-3" />
+                </button>
+              </>
             ) : (
               <button
                 type="button"
                 onClick={(e) => handleClose(e, path)}
-                className="size-[15px] grid place-items-center rounded-sm text-fg-subtle opacity-0 group-hover:opacity-100 hover:bg-bg-subtle"
+                className="size-[15px] grid place-items-center rounded-sm text-fg-subtle opacity-0 group-hover:opacity-100 hover:bg-bg-subtle shrink-0"
                 style={{ opacity: active ? 1 : undefined }}
                 aria-label={`Close ${basename(path)}`}
               >

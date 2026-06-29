@@ -234,6 +234,10 @@ export const BlockSourceEdit = Extension.create({
         },
         props: {
           handleDoubleClick(view: EditorView, pos: number) {
+            // Only trigger raw-source edit in view (read-only) mode. In edit
+            // mode the editor is WYSIWYG and double-click should select a
+            // word, not hijack the gesture into a source-edit overlay.
+            if (editor.isEditable) return false
             return startEditAtPos(view, pos)
           },
           decorations(state: EditorState) {
