@@ -13,9 +13,8 @@
 
 import { Extension } from '@tiptap/core'
 import type { Editor } from '@tiptap/core'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey, TextSelection as ProseMirrorTextSelection } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
-import { getBlockSourceEditStorage } from './block-source-edit'
 import { swapBlocks, pasteBlock } from './block-actions'
 
 const key = new PluginKey('blockInsertBar')
@@ -24,23 +23,22 @@ const key = new PluginKey('blockInsertBar')
 const REVEAL_BAND = 14
 
 /**
- * Insert an empty paragraph at `seamPos`, then drop it into raw-source edit
- * mode via BlockSourceEdit's storage hook. The new block is focused exactly
- * like double-clicking it.
+ * Insert an empty paragraph at `seamPos` and place the caret inside it.
+ * Does NOT enter raw-source edit mode — the new block stays a normal
+ * WYSIWYG paragraph so the user can type immediately. (Edit mode is for
+ * intentional source editing via double-click; the + button is for quick
+ * insertion.)
  */
-function insertBetweenAndEdit(editor: Editor, seamPos: number): void {
+function insertBetween(editor: Editor, seamPos: number): void {
   const view = editor.view
   const { tr, schema } = view.state
   const p = schema.nodes.paragraph.create()
   tr.insert(seamPos, p)
   tr.setMeta('skipTrailingNode', true)
+  // seamPos is a block boundary (depth 0); +1 lands inside the new paragraph.
+  tr.setSelection(ProseMirrorTextSelection.near(tr.doc.resolve(seamPos + 1)))
   view.dispatch(tr)
-  const storage = getBlockSourceEditStorage(editor)
-  if (!storage?.startEditAt) return
-  // seamPos is a block boundary (depth 0); +1 resolves inside the new
-  // paragraph (depth 1) so startEditAt's guard passes.
-  const startEditAt = storage.startEditAt
-  requestAnimationFrame(() => startEditAt(seamPos + 1))
+  view.focus()
 }
 
 export const BlockInsertBar = Extension.create({
@@ -85,7 +83,7 @@ export const BlockInsertBar = Extension.create({
         e.preventDefault()
         e.stopPropagation()
         if (activeSeam == null) return
-        insertBetweenAndEdit(editor, activeSeam)
+        insertBetween(editor, activeSeam)
       })
       bar.appendChild(line)
 

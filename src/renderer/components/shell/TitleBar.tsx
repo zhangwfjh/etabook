@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Copy, History, Minus, PanelLeft, Redo2, Save, Settings, Square, Undo2, X } from 'lucide-react'
 import { useWorkspace } from '@/state/store'
-import { getEditor } from '@/editor/doc-registry'
+import { getEditor, subscribeEditors } from '@/editor/doc-registry'
 import { useSettings } from '@/queries/settings'
 import { resolveShortcuts } from '../../../shared/ipc'
 
@@ -31,16 +31,37 @@ export function TitleBar({ onOpenSettings }: Props) {
 
   const noDrag = { WebkitAppRegion: 'none' } as React.CSSProperties
   useEffect(() => {
-    if (!active) { setCanUndo(false); setCanRedo(false); return }
-    const editor = getEditor(active)
-    if (!editor) { setCanUndo(false); setCanRedo(false); return }
+    let editor = active ? getEditor(active) : null
+
     const read = () => {
-      setCanUndo(editor.can().undo())
-      setCanRedo(editor.can().redo())
+      const ed = active ? getEditor(active) : null
+      setCanUndo(!!ed && ed.can().undo())
+      setCanRedo(!!ed && ed.can().redo())
     }
-    read()
-    editor.on('transaction', read)
-    return () => { editor.off('transaction', read) }
+
+    if (!active) { setCanUndo(false); setCanRedo(false); return }
+
+    // The editor for the active file is registered asynchronously (after
+    // DocSession's handleReady), so on `active` change getEditor() often
+    // returns null here. Re-check inside the registry subscription so the
+    // transaction listener binds the moment the editor appears.
+    if (editor) {
+      read()
+      editor.on('transaction', read)
+    }
+    const off = subscribeEditors(() => {
+      const next = active ? getEditor(active) : null
+      if (next === editor) return
+      editor?.off('transaction', read)
+      editor = next
+      if (editor) {
+        read()
+        editor.on('transaction', read)
+      } else {
+        setCanUndo(false); setCanRedo(false)
+      }
+    })
+    return () => { editor?.off('transaction', read); off() }
   }, [active])
 
   const isEditMode = mode === 'edit'

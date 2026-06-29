@@ -10,7 +10,8 @@ import { toast } from 'sonner'
 import type { Editor as TiptapEditor } from '@tiptap/react'
 import type { JSONContent } from '@tiptap/core'
 import type { FilesWriteRes } from '../../../shared/ipc'
-import { editorRegistry, persistRegistry } from '@/editor/doc-registry'
+import { persistRegistry, registerEditor, unregisterEditor } from '@/editor/doc-registry'
+import { rawFocusSerialize, RAW_FOCUS_META } from '@/editor/block-raw-focus'
 import { FindReplacePanel } from '@/components/editor/FindReplacePanel'
 import { useFindReplace } from '@/state/find-replace-store'
 
@@ -48,10 +49,9 @@ export function DocSession({ filePath, visible }: Props) {
     savedMd.current = parsed ? (mgr.serialize(parsed) ?? file.content) : file.content
     lastBlockFingerprint.current = null
   }, [file, mgr])
-
   function currentMd(): string | null {
     if (!editor) return null
-    return mgr.serialize(editor.state.doc.toJSON() as JSONContent)
+    return rawFocusSerialize(editor)
   }
 
   function blockFingerprint(doc: JSONContent): string {
@@ -102,8 +102,8 @@ export function DocSession({ filePath, visible }: Props) {
 
   // Register editor + persist into the module registries for the lifetime of this doc.
   useEffect(() => {
-    if (editor) editorRegistry.set(filePath, editor)
-    return () => { editorRegistry.delete(filePath) }
+    if (editor) registerEditor(filePath, editor)
+    return () => { unregisterEditor(filePath) }
   }, [filePath, editor])
   useEffect(() => {
     persistRegistry.set(filePath, persistToDisk)
@@ -121,7 +121,7 @@ export function DocSession({ filePath, visible }: Props) {
       if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 's') {
         e.preventDefault()
         if (!editor) return
-        const md = mgr.serialize(editor.state.doc.toJSON() as JSONContent)
+        const md = rawFocusSerialize(editor)
         if (md == null) return
         create.mutate({ filePath, content: md, trigger: 'manual', isAutosave: false })
         toast.success('Snapshot saved.')
@@ -156,10 +156,13 @@ export function DocSession({ filePath, visible }: Props) {
 
   function handleReady(ed: TiptapEditor) {
     setEditor(ed)
-    ed.on('update', () => {
-      const json = ed.state.doc.toJSON() as JSONContent
-      const md = mgr.serialize(json)
+    ed.on('update', ({ transaction }: { transaction: { getMeta: (k: string) => unknown } }) => {
+      // Skip the raw-focus display transitions (swap/restore): they are a
+      // transient representation change, not a content edit.
+      if (transaction.getMeta(RAW_FOCUS_META)) return
+      const md = rawFocusSerialize(ed)
       if (md == null) return
+      const json = ed.state.doc.toJSON() as JSONContent
       useWorkspace.getState().setDocDirty(filePath, md !== savedMd.current)
       autosnapshot(md, json)
     })

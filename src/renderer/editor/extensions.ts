@@ -29,6 +29,7 @@ import { LineOps } from './line-ops'
 import { Search } from './search'
 import { MultiCursor } from './multi-cursor'
 import { BlockInsertBar } from './block-insert-bar'
+import { BlockRawFocus } from './block-raw-focus'
 
 const lowlight = createLowlight(common)
 
@@ -92,6 +93,7 @@ export function buildExtensions() {
     MathInline,
     MathBlock,
     TrailingNode,
+    BlockRawFocus,
     BlockInsertBar,
   ]
 }
