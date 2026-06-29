@@ -644,11 +644,6 @@ export const BlockActionsKeymap = Extension.create({
         if (!preDragEditable) this.editor.setEditable(false)
         return true
       },
-      'Mod-Shift-k': () => {
-        const { from } = this.editor.state.selection
-        copyBlockLink(this.editor, from)
-        return true
-      },
       'Backspace': () => {
         const { empty, from } = this.editor.state.selection
         if (!empty) return false

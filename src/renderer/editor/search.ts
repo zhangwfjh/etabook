@@ -20,7 +20,7 @@
  */
 
 import { Extension, type Editor } from '@tiptap/core'
-import { Plugin, PluginKey, type EditorState } from '@tiptap/pm/state'
+import { Plugin, PluginKey, TextSelection, type EditorState } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import { toast } from 'sonner'
@@ -122,12 +122,13 @@ function cycleActive(editor: Editor, delta: number) {
   const base = s.activeIndex ?? 0
   const next = ((base + delta) % len + len) % len
   const updated: SearchState = { ...s, activeIndex: next }
-  editor.view.dispatch(editor.state.tr.setMeta(searchKey, updated))
   const m = s.matches[next]
-  if (m) {
-    editor.commands.setTextSelection({ from: m.from, to: m.to })
-    editor.commands.scrollIntoView()
-  }
+  if (!m) return
+  // Combine meta update + selection + scroll in ONE transaction.
+  const tr = editor.state.tr.setMeta(searchKey, updated)
+  tr.setSelection(TextSelection.create(editor.state.doc, m.from, m.to))
+  tr.scrollIntoView()
+  editor.view.dispatch(tr)
 }
 
 export const Search = Extension.create({

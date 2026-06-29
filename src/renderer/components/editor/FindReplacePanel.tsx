@@ -59,20 +59,29 @@ export function FindReplacePanel({ editor }: Props) {
     }
   }, [editor, open])
 
-  // Esc closes the panel and moves cursor to the active match
+  // Esc closes the panel and moves cursor to the start of the active match
   useEffect(() => {
     if (!open) return
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault()
+        // Capture the active match position BEFORE closing
+        // (closing clears the query which clears matches).
+        let matchPos: number | null = null
         if (editor) {
           const s = editor.storage.search?.state
           if (s && s.matches.length > 0 && s.activeIndex !== null) {
-            const m = s.matches[s.activeIndex]
-            editor.chain().focus().setTextSelection({ from: m.from, to: m.to }).run()
+            matchPos = s.matches[s.activeIndex].from
           }
         }
         closePanel()
+        // Move cursor AFTER the panel state settles, so the search-clear
+        // effect doesn't overwrite our selection.
+        if (editor && matchPos !== null) {
+          requestAnimationFrame(() => {
+            editor.chain().focus().setTextSelection(matchPos!).run()
+          })
+        }
       }
     }
     window.addEventListener('keydown', onKey)
