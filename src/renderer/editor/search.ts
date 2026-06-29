@@ -124,11 +124,26 @@ function cycleActive(editor: Editor, delta: number) {
   const updated: SearchState = { ...s, activeIndex: next }
   const m = s.matches[next]
   if (!m) return
-  // Combine meta update + selection + scroll in ONE transaction.
+  // Dispatch meta + selection + scroll in one transaction.
   const tr = editor.state.tr.setMeta(searchKey, updated)
   tr.setSelection(TextSelection.create(editor.state.doc, m.from, m.to))
   tr.scrollIntoView()
   editor.view.dispatch(tr)
+  // Belt-and-suspenders: manually scroll the scroll container too,
+  // because the editor is nested inside a div.overflow-y-auto that
+  // ProseMirror's own scrollIntoView may not reach.
+  requestAnimationFrame(() => {
+    try {
+      const coords = editor.view.coordsAtPos(m.from)
+      const scroller = editor.view.dom.closest('.overflow-y-auto') as HTMLElement | null
+      if (scroller) {
+        const rect = scroller.getBoundingClientRect()
+        if (coords.top < rect.top || coords.bottom > rect.bottom) {
+          scroller.scrollTop += coords.top - rect.top - 40
+        }
+      }
+    } catch { /* pos may be stale after reflow */ }
+  })
 }
 
 export const Search = Extension.create({

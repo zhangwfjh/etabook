@@ -101,9 +101,6 @@ export function FindReplacePanel({ editor }: Props) {
     e?.preventDefault()
     editor?.commands.findNext()
   }
-  function prev() {
-    editor?.commands.findPrev()
-  }
   function replace() {
     editor?.chain().focus().replaceCurrent().run()
   }
@@ -125,10 +122,16 @@ export function FindReplacePanel({ editor }: Props) {
           placeholder="Find"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && e.shiftKey) {
+              e.preventDefault()
+              editor?.commands.findPrev()
+            }
+          }}
           autoFocus
         />
         <span className="text-[10px] text-fg-subtle tabular-nums w-12 text-center">{counter}</span>
-        <button type="button" onClick={prev} className="p-1 rounded hover:bg-bg-subtle text-fg-muted" aria-label="Previous match">
+        <button type="button" onClick={() => editor?.commands.findPrev()} className="p-1 rounded hover:bg-bg-subtle text-fg-muted" aria-label="Previous match">
           <ArrowUp size={14} />
         </button>
         <button type="submit" className="p-1 rounded hover:bg-bg-subtle text-fg-muted" aria-label="Next match">

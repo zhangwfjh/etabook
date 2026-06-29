@@ -99,20 +99,44 @@ export const LineOps = Extension.create({
         ({ editor, tr, state, dispatch }) => {
           if (!editor.isEditable) return false
           const { selection, doc } = state
-          const blockPos = resolveTopLevelBlockPos(editor, selection.from)
-          const blockNode = doc.nodeAt(blockPos)
-          if (!blockNode) return false
-          const blockEnd = blockPos + blockNode.nodeSize
-          const docSize = doc.content.size
-          if (doc.childCount <= 1) {
-            // Last block: clear its content to an empty paragraph instead of deleting.
-            tr.delete(0, docSize)
-            tr.insert(0, state.schema.nodes.paragraph.create())
-            tr.setSelection(TextSelection.near(tr.doc.resolve(1)))
+          const pos = selection.from
+          const $pos = doc.resolve(pos)
+          // Find line boundaries within the current text node.
+          // A "line" here means text between newlines or block boundaries.
+          const text = $pos.parent.textContent
+          const offset = $pos.parentOffset
+          // Find the start of the current line (previous newline or block start).
+          let lineStart = 0
+          for (let i = offset - 1; i >= 0; i--) {
+            if (text[i] === '\n') { lineStart = i + 1; break }
+          }
+          // Find the end of the current line (next newline or block end).
+          let lineEnd = text.length
+          for (let i = offset; i < text.length; i++) {
+            if (text[i] === '\n') { lineEnd = i; break }
+          }
+          // Convert parent-local offsets to doc positions.
+          const blockStart = pos - offset
+          const fromPos = blockStart + lineStart
+          const toPos = blockStart + lineEnd
+          if (fromPos === toPos) {
+            // Empty line: just delete the newline or the block if it's the only content.
+            if ($pos.parent.textContent === '') {
+              const blockPos = resolveTopLevelBlockPos(editor, pos)
+              const blockNode = doc.nodeAt(blockPos)
+              if (!blockNode) return false
+              if (doc.childCount <= 1) {
+                tr.delete(0, doc.content.size)
+                tr.insert(0, state.schema.nodes.paragraph.create())
+              } else {
+                tr.delete(blockPos, blockPos + blockNode.nodeSize)
+              }
+            } else if (toPos < doc.content.size) {
+              // Delete the newline char after the empty line.
+              tr.delete(fromPos, toPos + 1)
+            }
           } else {
-            tr.delete(blockPos, blockEnd)
-            const newPos = Math.min(blockPos, tr.doc.content.size - 1)
-            tr.setSelection(TextSelection.near(tr.doc.resolve(Math.max(1, newPos))))
+            tr.delete(fromPos, toPos)
           }
           if (dispatch) dispatch(tr)
           return true
