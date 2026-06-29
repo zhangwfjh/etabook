@@ -229,6 +229,42 @@ function findNextOccurrence(
   return all.find((o) => !takenSet.has(rangeKey(o))) ?? null
 }
 
+
+/** Word (a maximal run of `\w`) range covering `pos`, or null when `pos`
+ *  isn't inside a word. If the char at `pos` isn't a word char, backs up one
+ *  position so a click landing just past a word still selects it. */
+function wordRangeAtPos(doc: PmNode, pos: number): MCRange | null {
+  const isWord = (c: string): boolean => c.length === 1 && /\w/.test(c)
+  const at = (p: number): string =>
+    p >= 0 && p <= doc.content.size ? doc.textBetween(p, p + 1, '') : ''
+  let p = pos
+  if (!isWord(at(p))) {
+    if (isWord(at(p - 1))) p -= 1
+    else return null
+  }
+  const size = doc.content.size
+  let start = p
+  while (start > 0 && isWord(at(start - 1))) start -= 1
+  let end = p
+  while (end < size && isWord(at(end))) end += 1
+  if (start === end) return null
+  return { from: start, to: end }
+}
+
+/** Drop ranges that share both `from` and `to` with an earlier range,
+ *  preserving first-seen order. */
+function dedupeRanges(ranges: MCRange[]): MCRange[] {
+  const seen = new Set<string>()
+  const out: MCRange[] = []
+  for (const r of ranges) {
+    const k = `${r.from}:${r.to}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(r)
+  }
+  return out
+}
+
 // ---------------------------------------------------------------------------
 // Fan-out
 // ---------------------------------------------------------------------------
@@ -334,19 +370,31 @@ export const MultiCursor = Extension.create({
         ({ editor, state, dispatch }) => {
           if (!editor.isEditable) return false
           const { selection, doc } = state
+          // Empty caret (not multi-cursor): the FIRST Ctrl+D selects the word
+          // under the cursor (no multi-cursor yet). The next Ctrl+D, now over
+          // a non-empty selection, finds and appends the next occurrence as a
+          // new cursor. Mirrors VS Code.
+          if (
+            !(selection instanceof MultiCursorSelection) &&
+            selection.from === selection.to
+          ) {
+            const word = wordRangeAtPos(doc, selection.from)
+            if (!word) return false
+            const ts = TextSelection.create(doc, word.from, word.to)
+            if (dispatch) dispatch(state.tr.setSelection(ts))
+            return true
+          }
+
           const text = doc.textBetween(selection.from, selection.to, ' ')
           if (!text) return false
 
           let taken: MCRange[]
-          let primary: number
           let searchFrom: number
           if (selection instanceof MultiCursorSelection) {
             taken = selection.ranges
-            primary = selection.primaryIndex
             searchFrom = selection.ranges[selection.primaryIndex].to
           } else {
             taken = [{ from: selection.from, to: selection.to }]
-            primary = 0
             searchFrom = selection.to
           }
 
@@ -355,7 +403,6 @@ export const MultiCursor = Extension.create({
 
           const ranges = [...taken, match]
           const sel = MultiCursorSelection.create(doc, ranges, ranges.length - 1)
-          void primary
           if (dispatch) dispatch(state.tr.setSelection(sel))
           return true
         },
@@ -364,21 +411,38 @@ export const MultiCursor = Extension.create({
         () =>
         ({ editor, state, dispatch }) => {
           if (!editor.isEditable) return false
-          const { selection } = state
+          const { selection, doc } = state
           if (!(selection instanceof MultiCursorSelection)) return false
-          if (selection.ranges.length <= 1) {
-            // Nothing to skip; exit instead.
-            const r = selection.ranges[selection.primaryIndex]
-            const ts = TextSelection.create(state.doc, r.from, r.to)
-            if (dispatch) dispatch(state.tr.setSelection(ts))
-            return true
-          }
-          const ranges = selection.ranges.filter(
+
+          const primaryRange = selection.ranges[selection.primaryIndex]
+          const text = doc.textBetween(primaryRange.from, primaryRange.to, ' ')
+
+          // Drop the primary range, then advance to the next occurrence of the
+          // same text (if any) as the new primary. Skipping unselects the
+          // current word and jumps to the next match.
+          const remaining = selection.ranges.filter(
             (_, i) => i !== selection.primaryIndex,
           )
-          const nextPrimary = selection.primaryIndex % ranges.length
-          const sel = MultiCursorSelection.create(state.doc, ranges, nextPrimary)
-          if (dispatch) dispatch(state.tr.setSelection(sel))
+          const match = text
+            ? findNextOccurrence(doc, text, primaryRange.to, remaining)
+            : null
+
+          if (match) {
+            const ranges = [...remaining, match]
+            const sel = MultiCursorSelection.create(doc, ranges, ranges.length - 1)
+            if (dispatch) dispatch(state.tr.setSelection(sel))
+            return true
+          }
+
+          // No more occurrences: collapse out of multi-cursor.
+          if (remaining.length <= 1) {
+            const r = remaining[0] ?? primaryRange
+            const ts = TextSelection.create(doc, r.from, r.to)
+            if (dispatch) dispatch(state.tr.setSelection(ts))
+          } else {
+            const sel = MultiCursorSelection.create(doc, remaining, 0)
+            if (dispatch) dispatch(state.tr.setSelection(sel))
+          }
           return true
         },
 
@@ -438,41 +502,70 @@ export const MultiCursor = Extension.create({
           decorations(state) {
             const sel = state.selection
             if (!(sel instanceof MultiCursorSelection)) return DecorationSet.empty
-            const decos: Decoration[] = sel.ranges.map((r, i) =>
-              Decoration.widget(
-                r.from,
-                () => {
-                  const span = document.createElement('span')
-                  span.className =
-                    i === sel.primaryIndex
-                      ? 'mc-caret mc-caret-primary'
-                      : 'mc-caret mc-caret-secondary'
-                  return span
-                },
-                { side: -1 },
-              ),
-            )
+            const decos: Decoration[] = []
+            for (let i = 0; i < sel.ranges.length; i++) {
+              const r = sel.ranges[i]
+              // Highlight the selected span for each non-empty range, in
+              // addition to the caret widget below.
+              if (r.from !== r.to) {
+                decos.push(Decoration.inline(r.from, r.to, { class: 'mc-selection' }))
+              }
+              decos.push(
+                Decoration.widget(
+                  r.from,
+                  () => {
+                    const span = document.createElement('span')
+                    span.className =
+                      i === sel.primaryIndex
+                        ? 'mc-caret mc-caret-primary'
+                        : 'mc-caret mc-caret-secondary'
+                    return span
+                  },
+                  { side: -1 },
+                ),
+              )
+            }
             return DecorationSet.create(state.doc, decos)
           },
 
-          handleClick(view, pos, event) {
+          // Alt+Click adds a cursor at the click point, keeping every existing
+          // caret. Handled on `mousedown` (before ProseMirror's own selection
+          // update) so the click never collapses to a single caret first.
+          handleDOMEvents: {
+            mousedown(view, event) {
+              if (!view.editable) return false
+              const me = event as MouseEvent
+              if (!me.altKey) return false
+              const hit = view.posAtCoords({ left: me.clientX, top: me.clientY })
+              if (!hit) return false
+              const sel = view.state.selection
+              let ranges: MCRange[]
+              let primary: number
+              if (sel instanceof MultiCursorSelection) {
+                ranges = [...sel.ranges, { from: hit.pos, to: hit.pos }]
+                primary = ranges.length - 1
+              } else {
+                ranges = [
+                  { from: sel.from, to: sel.to },
+                  { from: hit.pos, to: hit.pos },
+                ]
+                primary = 1
+              }
+              const newSel = MultiCursorSelection.create(view.state.doc, ranges, primary)
+              view.dispatch(view.state.tr.setSelection(newSel))
+              me.preventDefault()
+              return true
+            },
+          },
+
+          // Double-click selects the word under the click with NO surrounding
+          // whitespace (the default word selection can include it).
+          handleDoubleClick(view, pos) {
             if (!view.editable) return false
-            if (!(event as MouseEvent).altKey) return false
-            const sel = view.state.selection
-            let ranges: MCRange[]
-            let primary: number
-            if (sel instanceof MultiCursorSelection) {
-              ranges = [...sel.ranges, { from: pos, to: pos }]
-              primary = ranges.length - 1
-            } else {
-              ranges = [
-                { from: sel.from, to: sel.to },
-                { from: pos, to: pos },
-              ]
-              primary = 1
-            }
-            const newSel = MultiCursorSelection.create(view.state.doc, ranges, primary)
-            view.dispatch(view.state.tr.setSelection(newSel))
+            const range = wordRangeAtPos(view.state.doc, pos)
+            if (!range) return false
+            const ts = TextSelection.create(view.state.doc, range.from, range.to)
+            view.dispatch(view.state.tr.setSelection(ts))
             return true
           },
 
@@ -485,8 +578,72 @@ export const MultiCursor = Extension.create({
                 view.dispatch(view.state.tr.setSelection(ts))
                 return true
               }
+              return false
             }
-            return false
+
+            // Arrow keys move EVERY caret together while in multi-cursor mode.
+            // Collisions (two carets landing on the same spot) are merged, and
+            // if only one caret remains we drop back to a TextSelection.
+            const sel = view.state.selection
+            if (!(sel instanceof MultiCursorSelection)) return false
+            const k = event.key
+            if (
+              event.shiftKey ||
+              event.altKey ||
+              event.metaKey ||
+              event.ctrlKey
+            ) {
+              return false
+            }
+            if (
+              k !== 'ArrowLeft' &&
+              k !== 'ArrowRight' &&
+              k !== 'ArrowUp' &&
+              k !== 'ArrowDown'
+            ) {
+              return false
+            }
+
+            const doc = view.state.doc
+            const size = doc.content.size
+            let moved: MCRange[]
+            if (k === 'ArrowLeft' || k === 'ArrowRight') {
+              const dir = k === 'ArrowRight' ? 1 : -1
+              moved = sel.ranges.map((r) => ({
+                from: Math.max(0, Math.min(size, r.from + dir)),
+                to: Math.max(0, Math.min(size, r.to + dir)),
+              }))
+            } else {
+              const dir = k === 'ArrowDown' ? 1 : -1
+              moved = sel.ranges.map((r) => {
+                try {
+                  const coords = view.coordsAtPos(r.from)
+                  const target = dir === 1 ? coords.bottom + 4 : coords.top - 4
+                  const hit = view.posAtCoords({ left: coords.left, top: target })
+                  if (hit) return { from: hit.pos, to: hit.pos }
+                } catch {
+                  // coords resolution failed — leave this caret where it is.
+                }
+                return { from: r.from, to: r.to }
+              })
+            }
+
+            const merged = dedupeRanges(moved)
+            event.preventDefault()
+            if (merged.length <= 1) {
+              const r = merged[0] ?? sel.ranges[sel.primaryIndex]
+              view.dispatch(
+                view.state.tr.setSelection(TextSelection.create(doc, r.from, r.to)),
+              )
+            } else {
+              const newSel = MultiCursorSelection.create(
+                doc,
+                merged,
+                Math.min(sel.primaryIndex, merged.length - 1),
+              )
+              view.dispatch(view.state.tr.setSelection(newSel))
+            }
+            return true
           },
         },
         appendTransaction(transactions, oldState, newState) {

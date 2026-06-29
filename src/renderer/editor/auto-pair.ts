@@ -33,6 +33,15 @@ const PAIRS: Record<string, string> = {
 }
 
 const QUOTE_OPENS: Record<string, true> = { "'": true, '"': true, '`': true }
+// The set of closers (PAIRS values). Used to gate skip-over so an OPENER
+// next to an identical char still auto-closes (lets you nest brackets).
+const CLOSERS: Record<string, true> = Object.values(PAIRS).reduce(
+  (acc, c) => {
+    acc[c] = true
+    return acc
+  },
+  {} as Record<string, true>,
+)
 
 export const AutoPair = Extension.create({
   name: 'autoPair',
@@ -67,10 +76,13 @@ export const AutoPair = Extension.create({
               return true
             }
 
-            // Case 2: skip-over — caret right before an identical character.
-            // Checked before the opener guard so closers (e.g. `)`) also skip.
+            // Case 2: skip-over — typing a CLOSER while the caret sits
+            // immediately before an identical character just moves the caret
+            // past it instead of inserting. Openers never skip (they always
+            // auto-close), so typing `(` with a `(` already ahead still
+            // inserts a pair — letting you nest brackets.
             const charAfter = state.doc.textBetween(from, from + 1, '')
-            if (charAfter === text) {
+            if (CLOSERS[text] && charAfter === text) {
               view.dispatch(state.tr.setSelection(TextSelection.near(state.doc.resolve(from + 1))))
               return true
             }
