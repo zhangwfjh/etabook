@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
 import { Copy, Check } from 'lucide-react'
@@ -61,14 +61,8 @@ export function unwrapCodeToBlockquote(editor: Editor, pos: number): void {
 export function CodeBlockNodeView({ node, updateAttributes, editor, getPos }: NodeViewProps) {
   const language = (node.attrs.language as string | null) ?? null
   const code = node.textContent
+  const isMermaid = language === 'mermaid'
 
-  if (language === 'mermaid') {
-    return (
-      <NodeViewWrapper as="div" className="etabook-code-block etabook-code-block-mermaid">
-        <MermaidView source={code} />
-      </NodeViewWrapper>
-    )
-  }
   const fenceChar = (node.attrs.fenceChar as string) === '~' ? '~' : '`'
   const fenceLength =
     typeof node.attrs.fenceLength === 'number' && node.attrs.fenceLength >= 3
@@ -92,6 +86,36 @@ export function CodeBlockNodeView({ node, updateAttributes, editor, getPos }: No
   // editable fence line (```lang) when the header input is focused. View mode
   // always shows the plain label.
   const [focused, setFocused] = useState(false)
+
+  // Mermaid source editing — mirrors math-node-view: click the rendered
+  // diagram (in edit mode) to reveal a raw-source textarea; commit on
+  // blur / Cmd+Enter, cancel on Escape.
+  const [mermaidEditing, setMermaidEditing] = useState(false)
+  const [mermaidDraft, setMermaidDraft] = useState(code)
+  const mermaidTaRef = useRef<HTMLTextAreaElement | null>(null)
+
+  useEffect(() => {
+    if (isMermaid && mermaidEditing && mermaidTaRef.current) {
+      const ta = mermaidTaRef.current
+      ta.focus()
+      ta.setSelectionRange(ta.value.length, ta.value.length)
+    }
+  }, [isMermaid, mermaidEditing])
+
+  function commitMermaid(): void {
+    const pos = getPos()
+    if (typeof pos === 'number' && mermaidDraft !== code) {
+      // Replace text content inside the code block (pos+1 … pos+nodeSize-1).
+      const tr = editor.state.tr.insertText(
+        mermaidDraft,
+        pos + 1,
+        pos + node.nodeSize - 1,
+      )
+      editor.view.dispatch(tr)
+    }
+    setMermaidEditing(false)
+  }
+
   function onHeaderChange(raw: string): void {
     setHeader(raw)
     // Clearing the whole header line removes the fence → convert to blockquote.
@@ -112,38 +136,91 @@ export function CodeBlockNodeView({ node, updateAttributes, editor, getPos }: No
     // leave attrs alone and let them keep typing.
   }
 
+  const headerEl = (
+    <div
+      className={`etabook-code-block-header${focused ? ' is-focused' : ''}${language ? '' : ' etabook-code-block-header--empty'}`}
+      contentEditable={false}
+    >
+      {/* Field: wraps the static label and the raw input. The input is
+          always present (never display:none) but invisible (opacity:0,
+          position:absolute) when not focused — it overlays the static label
+          so clicking the header focuses it. */}
+      <div className="etabook-code-block-field">
+        {language ? (
+          <span className="etabook-code-lang etabook-code-lang--static">{language}</span>
+        ) : null}
+        <input
+          className="etabook-code-lang etabook-code-lang--edit"
+          type="text"
+          value={header}
+          placeholder="```language"
+          spellCheck={false}
+          onChange={(e) => onHeaderChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          onMouseDown={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        />
+      </div>
+    </div>
+  )
+
+  if (isMermaid) {
+    return (
+      <NodeViewWrapper
+        as="div"
+        className="etabook-code-block etabook-code-block--edit etabook-code-block-mermaid"
+        dir="ltr"
+      >
+        <CopyButton text={code} />
+        {headerEl}
+        {mermaidEditing ? (
+          <textarea
+            ref={mermaidTaRef}
+            className="etabook-source-edit"
+            value={mermaidDraft}
+            onChange={(e) => setMermaidDraft(e.target.value)}
+            onBlur={commitMermaid}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.preventDefault(); setMermaidEditing(false) }
+              else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) { e.preventDefault(); commitMermaid() }
+            }}
+            rows={Math.max(2, mermaidDraft.split('\n').length)}
+            spellCheck={false}
+          />
+        ) : (
+          <div
+            contentEditable={false}
+            onClick={() => {
+              if (editor.isEditable) {
+                setMermaidDraft(code)
+                setMermaidEditing(true)
+              }
+            }}
+          >
+            <MermaidView source={code} />
+          </div>
+        )}
+      </NodeViewWrapper>
+    )
+  }
+
+  const lineCount = Math.max(1, code.split('\n').length)
+
   return (
     <NodeViewWrapper as="div" className="etabook-code-block etabook-code-block--edit" dir="ltr">
       <CopyButton text={code} />
-      <div
-        className={`etabook-code-block-header${focused ? ' is-focused' : ''}${language ? '' : ' etabook-code-block-header--empty'}`}
-        contentEditable={false}
-      >
-        {/* Field: wraps the static label and the raw input. The input is
-            always present (never display:none) but invisible (opacity:0,
-            position:absolute) when not focused — it overlays the static label
-            so clicking the header focuses it. */}
-        <div className="etabook-code-block-field">
-          {language ? (
-            <span className="etabook-code-lang etabook-code-lang--static">{language}</span>
-          ) : null}
-          <input
-            className="etabook-code-lang etabook-code-lang--edit"
-            type="text"
-            value={header}
-            placeholder="```language"
-            spellCheck={false}
-            onChange={(e) => onHeaderChange(e.target.value)}
-            onFocus={() => setFocused(true)}
-            onBlur={() => setFocused(false)}
-            onMouseDown={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
-          />
+      {headerEl}
+      <div className="etabook-code-block-body">
+        <div className="etabook-code-block-gutter" aria-hidden="true" contentEditable={false}>
+          {Array.from({ length: lineCount }, (_, i) => (
+            <span key={i}>{i + 1}</span>
+          ))}
         </div>
+        <pre className="etabook-code-block-pre">
+          <NodeViewContent<"code"> as="code" className={`hljs language-${language ?? 'plain'}`} />
+        </pre>
       </div>
-      <pre className="etabook-code-block-pre">
-        <NodeViewContent<"code"> as="code" className={`hljs language-${language ?? 'plain'}`} />
-      </pre>
     </NodeViewWrapper>
   )
 }

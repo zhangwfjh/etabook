@@ -555,6 +555,40 @@ body {
   border-radius: var(--radius-default);
   overflow-x: auto;
 }
+/* Mermaid source textarea: fill the enclosing code-block content area
+   edge-to-edge (no inset margin), matching how the <pre> sits in the
+   container. Base .etabook-source-edit already supplies width:100%,
+   box-sizing, and padding. */
+.etabook-editor .etabook-code-block-mermaid .etabook-source-edit {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  min-height: 6em;
+}
+.etabook-editor .etabook-code-block-mermaid .etabook-source-edit:focus {
+  border-top-color: var(--accent);
+  box-shadow: none;
+}
+/* Mermaid rendered diagram: fill the enclosing code-block edge-to-edge and
+   center the diagram (both axes). The container provides the frame, so the
+   inner .etabook-mermaid drops its own border/bg/margin. */
+.etabook-editor .etabook-code-block-mermaid {
+  display: flex;
+  flex-direction: column;
+}
+.etabook-editor .etabook-code-block-mermaid .etabook-mermaid {
+  flex: 1;
+  margin: 0;
+  padding: 1em;
+  border: none;
+  background-color: transparent;
+  border-radius: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 4em;
+}
 
 .etabook-editor .etabook-mermaid svg {
   max-width: 100%;
@@ -593,14 +627,15 @@ body {
 
 .etabook-editor .etabook-code-block {
   position: relative;
-  background-color: var(--bg-subtle);
+  background-color: var(--bg-sunken);
   border: 1px solid var(--border);
-  border-radius: var(--radius-default);
+  border-radius: var(--radius-md);
   margin-bottom: 0.75em;
   overflow-x: auto;
-  font-size: 0.9em;
-  font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+  font-size: 0.85em;
+  font-family: var(--font-mono);
   padding: 0.75em 1em;
+  box-shadow: var(--shadow-xs);
 }
 
 /* Edit-mode layout: container is a <div> holding a header bar + an inner
@@ -615,19 +650,24 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5em;
-  padding: 0.3em 0.75em;
+  padding: 0.35em 0.85em;
   /* Reserve room on the right so the lang input/label doesn't underlap the
      absolute hover copy button (top-right of the container). */
-  padding-right: 2.25em;
+  padding-right: 2.5em;
   border-bottom: 1px solid var(--border);
-  background-color: var(--bg-elevated);
-  border-top-left-radius: var(--radius-default);
-  border-top-right-radius: var(--radius-default);
+  background-color: color-mix(in srgb, var(--bg-elevated) 60%, var(--bg-sunken));
+  border-top-left-radius: var(--radius-md);
+  border-top-right-radius: var(--radius-md);
 }
 
 /* Header visibility: hide header bar when empty AND not focused (no language,
    no caret) to avoid an empty bar. */
 .etabook-editor[data-editable="true"] .etabook-code-block-header:not(.is-focused).etabook-code-block-header--empty {
+  display: none;
+}
+/* View mode: hide every code-block header — the fence/lang bar is only
+   meaningful while editing. Diagrams and code stand alone in view mode. */
+.etabook-editor[data-editable="false"] .etabook-code-block-header {
   display: none;
 }
 
@@ -675,19 +715,60 @@ body {
   font-style: italic;
 }
 
+.etabook-editor .etabook-code-block-body {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  overflow: hidden;
+  /* Single source of truth for row height — gutter and pre both inherit. */
+  line-height: 1.65;
+}
+.etabook-editor .etabook-code-block-gutter {
+  flex-shrink: 0;
+  /* Match the pre's top padding exactly so line 1 lines up. */
+  padding: 0.85em 0.3em 0.85em 0.5em;
+  text-align: right;
+  color: var(--fg-subtle);
+  opacity: 0.6;
+  user-select: none;
+  -webkit-user-select: none;
+  border-right: 1px solid var(--border);
+  background-color: color-mix(in srgb, var(--bg-sunken) 70%, transparent);
+  font-family: inherit;
+  font-size: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: inherit;
+  white-space: pre;
+}
+.etabook-editor .etabook-code-block-gutter span {
+  display: block;
+}
 .etabook-editor .etabook-code-block-pre {
+  flex: 1;
+  min-width: 0;
   margin: 0;
-  padding: 0.75em 1em;
+  padding: 0.85em 1.1em;
   white-space: pre;
   overflow-x: auto;
+  /* Override the UA <pre> monospace default so the code uses the same
+     font as the gutter — matching ascent/descent keeps every row
+     pixel-aligned with its line number. */
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+.etabook-editor .etabook-code-block-pre code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 .etabook-editor .etabook-code-copy {
   position: absolute;
   top: 0.4em;
   right: 0.4em;
-  padding: 0.25em;
-  border-radius: 4px;
+  padding: 0.3em;
+  border-radius: var(--radius-sm);
   background-color: var(--bg-elevated);
   border: 1px solid var(--border);
   color: var(--fg-muted);
