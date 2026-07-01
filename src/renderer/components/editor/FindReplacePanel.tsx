@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ArrowUp, ArrowDown, X } from 'lucide-react'
 import { useFindReplace } from '@/state/find-replace-store'
 import type { Editor as TiptapEditor } from '@tiptap/react'
@@ -20,6 +20,20 @@ export function FindReplacePanel({ editor }: Props) {
     active: null,
     total: 0,
   })
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  // Focus the field and select its contents whenever the panel opens, so the
+  // seeded selection (e.g. from Ctrl+F over a word) is highlighted and typing
+  // replaces it. Mirrors VS Code.
+  useEffect(() => {
+    if (open) {
+      const el = inputRef.current
+      if (el) {
+        el.focus()
+        el.select()
+      }
+    }
+  }, [open])
 
   const canReplace = !!editor && editor.isEditable && count.total > 0
 
@@ -118,6 +132,7 @@ export function FindReplacePanel({ editor }: Props) {
     >
       <form onSubmit={next} className="flex items-center gap-1">
         <input
+          ref={inputRef}
           className="flex-1 px-2 py-1 text-xs rounded border border-border bg-bg-primary focus:outline-none focus:border-amber-400"
           placeholder="Find"
           value={query}
@@ -128,7 +143,6 @@ export function FindReplacePanel({ editor }: Props) {
               editor?.commands.findPrev()
             }
           }}
-          autoFocus
         />
         <span className="text-[10px] text-fg-subtle tabular-nums w-12 text-center">{counter}</span>
         <button type="button" onClick={() => editor?.commands.findPrev()} className="p-1 rounded hover:bg-bg-subtle text-fg-muted" aria-label="Previous match">

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Copy, History, Minus, PanelLeft, Redo2, Save, Settings, Square, Undo2, X } from 'lucide-react'
+import { Copy, History, Minus, PanelLeft, Redo2, Save, Search, Settings, Square, Undo2, X } from 'lucide-react'
 import { useWorkspace } from '@/state/store'
 import { getEditor, subscribeEditors } from '@/editor/doc-registry'
 import { useSettings } from '@/queries/settings'
+import { useFindReplace } from '@/state/find-replace-store'
 import { resolveShortcuts } from '../../../shared/ipc'
 
 type Props = { onOpenSettings: () => void }
@@ -112,6 +113,17 @@ export function TitleBar({ onOpenSettings }: Props) {
               <Redo2 size={14} />
             </button>
           </div>
+        )}
+        {active && (
+          <button
+            type="button"
+            onClick={() => useFindReplace.getState().openPanel()}
+            title={`Find (${shortcuts.find ?? ''})`}
+            className="size-7 grid place-items-center rounded hover:bg-bg-subtle text-fg-muted"
+            aria-label="Find"
+          >
+            <Search className="size-4" />
+          </button>
         )}
         {active && toggleMode && (
           <div

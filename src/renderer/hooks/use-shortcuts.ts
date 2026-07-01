@@ -69,6 +69,13 @@ export function useShortcuts({ onOpenSettings }: Props) {
           const ws = useWorkspace.getState()
           const ed = ws.activeFilePath ? getEditor(ws.activeFilePath) : null
           if (!ed) break
+          // Mirror VS Code: seed the search box with the current selection,
+          // but only when it's a single line (no newlines).
+          const { from, to } = ed.state.selection
+          if (to > from) {
+            const text = ed.state.doc.textBetween(from, to, '\n')
+            if (text && !text.includes('\n')) useFindReplace.getState().setQuery(text)
+          }
           useFindReplace.getState().openPanel()
           break
         }

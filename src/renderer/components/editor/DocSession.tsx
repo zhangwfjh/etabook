@@ -14,7 +14,6 @@ import { persistRegistry, registerEditor, unregisterEditor } from '@/editor/doc-
 import { rawFocusSerialize, RAW_FOCUS_META } from '@/editor/block-raw-focus'
 import { FindReplacePanel } from '@/components/editor/FindReplacePanel'
 import { FloatingToc } from '@/components/editor/FloatingToc'
-import { useFindReplace } from '@/state/find-replace-store'
 
 type Props = {
   filePath: string
@@ -174,10 +173,6 @@ export function DocSession({ filePath, visible }: Props) {
   useEffect(() => () => clearTimeout(snapshotTimer.current), [])
 
 
-  // Auto-close the find/replace panel when leaving edit mode.
-  useEffect(() => {
-    if (mode !== 'edit') useFindReplace.getState().closePanel()
-  }, [mode])
 
   return (
     <div style={visible ? { position: 'relative' } : { position: 'relative', display: 'none' }} className="h-full flex flex-col">
