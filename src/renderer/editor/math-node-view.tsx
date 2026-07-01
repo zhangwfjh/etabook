@@ -28,7 +28,7 @@ function escapeHtml(s: string): string {
   })
 }
 
-export function MathInlineNodeView({ node, updateAttributes, selected }: NodeViewProps) {
+export function MathInlineNodeView({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const latex = (node.attrs.latex as string) ?? ''
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(latex)
@@ -55,6 +55,12 @@ export function MathInlineNodeView({ node, updateAttributes, selected }: NodeVie
       className={`etabook-math-inline${selected ? ' is-selected' : ''}`}
       style={{ display: 'inline-block', position: 'relative' }}
       contentEditable={false}
+      onClick={() => {
+        if (editor.isEditable) {
+          setDraft(latex)
+          setEditing(true)
+        }
+      }}
       onDoubleClick={() => {
         setDraft(latex)
         setEditing(true)
@@ -80,7 +86,7 @@ export function MathInlineNodeView({ node, updateAttributes, selected }: NodeVie
   )
 }
 
-export function MathBlockNodeView({ node, updateAttributes, selected }: NodeViewProps) {
+export function MathBlockNodeView({ node, updateAttributes, selected, editor }: NodeViewProps) {
   const latex = (node.attrs.latex as string) ?? ''
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(latex)
@@ -107,6 +113,12 @@ export function MathBlockNodeView({ node, updateAttributes, selected }: NodeView
       className={`etabook-math-block${selected ? ' is-selected' : ''}`}
       style={{ position: 'relative' }}
       contentEditable={false}
+      onClick={() => {
+        if (editor.isEditable) {
+          setDraft(latex)
+          setEditing(true)
+        }
+      }}
       onDoubleClick={() => {
         setDraft(latex)
         setEditing(true)
