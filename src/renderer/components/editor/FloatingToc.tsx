@@ -69,43 +69,65 @@ export function FloatingToc({ editor, scrollEl }: Props) {
     return () => { editor.off('update', collect) }
   }, [editor])
 
-  // Keep the active H2 in sync with the scroll position.
+  // Keep the active H2 in sync with the scroll position. The listener is
+  // bound once per editor/scrollEl pair and reads `entries` through a ref so
+  // that re-subscription does not churn on every keystroke (entries rebuilds
+  // on each editor transaction). Recomputes on scroll, on viewport resize,
+  // and after content edits — a reflow shifts heading positions, so without
+  // the update hook the active mark drifts until the next manual scroll.
+  const entriesRef = useRef(entries)
+  entriesRef.current = entries
   useEffect(() => {
-    if (!editor || !scrollEl || entries.length === 0) return
+    if (!editor || !scrollEl) return
     const view = editor.view
     let raf = 0
+    const TOP_OFFSET = 80
     const recompute = () => {
       raf = 0
+      const ents = entriesRef.current
+      if (ents.length === 0) return
       const base = scrollEl.getBoundingClientRect().top
-      const probe = scrollEl.scrollTop + 80
+      const probe = scrollEl.scrollTop + TOP_OFFSET
       const topOf = (pos: number): number | null => {
         const dom = view.nodeDOM(pos) as HTMLElement | null
-        if (!dom) return null
-        return dom.getBoundingClientRect().top - base + scrollEl.scrollTop
+        const rect = dom && typeof dom.getBoundingClientRect === 'function' ? dom.getBoundingClientRect() : null
+        if (!rect) return null
+        return rect.top - base + scrollEl.scrollTop
       }
-      // active H2 = last section whose heading top is above the probe
-      let idx = 0
-      for (let k = 0; k < entries.length; k++) {
-        const top = topOf(entries[k].heading.pos)
-        if (top !== null && top <= probe) idx = k
+      // active H2 = last section whose heading top is above the probe.
+      // `e.index` is the flat headings-array index of the H2 (offset by any
+      // preceding H3s), so active must carry that same index — not the
+      // sequential entry position — or the render's `active === e.index`
+      // check silently never matches.
+      let activeEntry = 0
+      for (let k = 0; k < ents.length; k++) {
+        const top = topOf(ents[k].heading.pos)
+        if (top !== null && top <= probe) activeEntry = k
       }
       // active H3 = last child (within the active section) past the probe
       let childPos: number | null = null
-      for (const c of entries[idx].children) {
+      for (const c of ents[activeEntry].children) {
         const top = topOf(c.pos)
         if (top !== null && top <= probe) childPos = c.pos
       }
-      setActive(idx)
+      setActive(ents[activeEntry].index)
       setActiveChild(childPos)
     }
-    const onScroll = () => { if (!raf) raf = requestAnimationFrame(recompute) }
-    scrollEl.addEventListener('scroll', onScroll, { passive: true })
+    const schedule = () => { if (!raf) raf = requestAnimationFrame(recompute) }
+    const onUpdate = () => { // wait one frame so the new DOM is committed
+      if (!raf) raf = requestAnimationFrame(() => { raf = 0; recompute() })
+    }
+    scrollEl.addEventListener('scroll', schedule, { passive: true })
+    window.addEventListener('resize', schedule)
+    editor.on('update', onUpdate)
     recompute()
     return () => {
-      scrollEl.removeEventListener('scroll', onScroll)
+      scrollEl.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', schedule)
+      editor.off('update', onUpdate)
       if (raf) cancelAnimationFrame(raf)
     }
-  }, [editor, scrollEl, entries])
+  }, [editor, scrollEl])
 
   // Single gate: show the full rail only when the gutter (space between the
   // editor text column's right edge and the pane's right edge) comfortably
@@ -141,6 +163,7 @@ export function FloatingToc({ editor, scrollEl }: Props) {
     const dom = editor.view.nodeDOM(pos) as HTMLElement | null
     dom?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+
 
   // Anchor the expanded rail beside the text column with a comfortable gap.
   // rail-left = W - X - 224; text-right = W - gutter; gap = rail-left - text-right = gutter - X - 224.

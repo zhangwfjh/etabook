@@ -1182,10 +1182,10 @@ body::before {
 .etabook-toc-h3[data-active] { color: var(--accent-strong); font-weight: 500; }
 .etabook-toc-h3[data-active]::before { height: 12px; background: var(--accent); }
 
-/* ── Collapsed mode (narrow viewport) — a vertical line of nodes ──
+/* ── Collapsed mode (narrow viewport) — a vertical line of dots ──
    The rail shrinks to a thin column with one dot per H2, sitting on a
-   vertical guide line; the active section's dot is emphasized. Hovering
-   the rail expands it back to the full panel above. */
+   vertical guide line; the active section's dot (tracked by scroll-spy) is
+   emphasized. Hovering the rail expands it back to the full panel above. */
 .etabook-toc-rail[data-collapsed] { width: 16px; }
 .etabook-toc-rail[data-collapsed] .etabook-toc {
   width: 16px;
@@ -1229,7 +1229,11 @@ body::before {
   height: 8px;
   border-radius: 50%;
   background: var(--border-strong);
+  transition: width var(--dur-base) var(--ease-out-soft),
+              height var(--dur-base) var(--ease-out-soft),
+              background-color var(--dur-base) var(--ease-out-soft);
 }
+/* active (scroll-spy) section — amber dot + halo */
 .etabook-toc-rail[data-collapsed] .etabook-toc-h2[data-active]::before {
   left: 3px;
   width: 10px;
