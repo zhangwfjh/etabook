@@ -37,6 +37,9 @@ function createWindow() {
     e.preventDefault()
     win.webContents.send(IPC.windowOnCloseRequested, { windowId: win.id })
   })
+  const emitMaximize = () => win.webContents.send(IPC.windowOnMaximizeChange, { isMaximized: win.isMaximized() })
+  win.on('maximize', emitMaximize)
+  win.on('unmaximize', emitMaximize)
   if (isDev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
