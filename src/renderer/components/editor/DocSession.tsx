@@ -13,6 +13,7 @@ import type { FilesWriteRes } from '../../../shared/ipc'
 import { persistRegistry, registerEditor, unregisterEditor } from '@/editor/doc-registry'
 import { rawFocusSerialize, RAW_FOCUS_META } from '@/editor/block-raw-focus'
 import { FindReplacePanel } from '@/components/editor/FindReplacePanel'
+import { FloatingToc } from '@/components/editor/FloatingToc'
 import { useFindReplace } from '@/state/find-replace-store'
 
 type Props = {
@@ -35,6 +36,7 @@ export function DocSession({ filePath, visible }: Props) {
   const savedMd = useRef<string>('')
   const snapshotTimer = useRef<NodeJS.Timeout | undefined>(undefined)
   const lastBlockFingerprint = useRef<string | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
 
   const initialDoc = (() => {
     if (!file) return null
@@ -179,13 +181,14 @@ export function DocSession({ filePath, visible }: Props) {
 
   return (
     <div style={visible ? { position: 'relative' } : { position: 'relative', display: 'none' }} className="h-full flex flex-col">
-       <div className="flex-1 min-h-0 overflow-y-auto">
-         <div className="max-w-[var(--width-canvas-max)] mx-auto px-6 py-8 w-full">
-           {isFetching ? null : (
-             <Editor initialContent={initialDoc} editable={mode === 'edit'} onReady={handleReady} />
-           )}
-         </div>
-       </div>
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+        <div className="max-w-[var(--width-canvas-max)] mx-auto px-6 py-8 w-full">
+          {isFetching ? null : (
+            <Editor initialContent={initialDoc} editable={mode === 'edit'} onReady={handleReady} />
+          )}
+        </div>
+      </div>
+      <FloatingToc editor={editor} scrollEl={scrollRef.current} />
       <FindReplacePanel editor={editor} />
 
     </div>

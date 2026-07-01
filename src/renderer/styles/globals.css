@@ -1024,3 +1024,237 @@ body::before {
   border-radius: 0;
 }
 
+
+/* ════════════════════════════════════════════════════════════════════
+   FLOATING TABLE OF CONTENTS — `FloatingToc.tsx`
+   Only H2 entries are shown; hovering one emphasizes it and expands its
+   H3 children. The active section (scroll-spy) is pinned open + accented.
+   State is carried on data-attributes (data-open / data-active / data-hovered).
+   ═══════════════════════════════════════════════════════════════════ */
+.etabook-toc-rail {
+  position: absolute;              /* within the DocSession relative container */
+  top: 50%;
+  right: var(--toc-right, clamp(8px, 1.5vw, 24px));
+  transform: translateY(-50%);
+  z-index: 20;
+  width: 224px;
+  max-height: 72vh;
+  pointer-events: none;            /* gaps let pointer reach the editor */
+}
+.etabook-toc {
+  pointer-events: auto;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  line-height: 1.5;
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  backdrop-filter: blur(8px) saturate(1.1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 8px;
+  box-shadow: var(--shadow-md);
+  opacity: 0.78;
+  transition: opacity var(--dur-base) var(--ease-out-soft);
+  max-height: inherit;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+/* WebKit thin scrollbar tuned to the warm-paper palette */
+.etabook-toc::-webkit-scrollbar { width: 6px; }
+.etabook-toc::-webkit-scrollbar-track { background: transparent; }
+.etabook-toc::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--border-strong) 70%, transparent);
+  border-radius: 3px;
+}
+.etabook-toc::-webkit-scrollbar-thumb:hover { background: var(--accent-soft); }
+.etabook-toc:hover { opacity: 1; }
+
+.etabook-toc-caption {
+  position: sticky;
+  top: -10px;
+  z-index: 1;
+  margin: -10px -8px 4px;          /* bleed into card padding to span full width */
+  padding: 12px 10px 8px;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+/* ── level-2 entries — the only ones always visible ── */
+.etabook-toc-h2 {
+  position: relative;
+  display: block;
+  cursor: pointer;
+  padding: 6px 10px 6px 16px;
+  border-radius: 8px;
+  color: var(--fg-muted);
+  font-weight: 500;
+  text-decoration: none;
+  transition: color var(--dur-base) var(--ease-out-soft),
+              background-color var(--dur-base) var(--ease-out-soft),
+              transform var(--dur-base) var(--ease-out-soft);
+}
+/* left tick — grows / turns amber when hovered or active */
+.etabook-toc-h2::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--border-strong);
+  transition: height var(--dur-base) var(--ease-out-soft),
+              background-color var(--dur-base) var(--ease-out-soft);
+}
+.etabook-toc-h2:hover {
+  color: var(--fg-primary);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+.etabook-toc-h2:hover::before { background: var(--accent); height: 18px; }
+
+/* emphasized (hovered) — weight + indent + amber tick */
+.etabook-toc-h2[data-hovered] {
+  color: var(--accent-strong);
+  font-weight: 600;
+  transform: translateX(2px);
+}
+.etabook-toc-h2[data-hovered]::before { background: var(--accent); height: 20px; }
+
+/* active (scroll-spy) section */
+.etabook-toc-h2[data-active] { color: var(--accent-strong); font-weight: 600; }
+.etabook-toc-h2[data-active]::before { background: var(--accent); height: 18px; }
+
+/* ── expandable H3 group — grid height animation ── */
+.etabook-toc-sub {
+  display: grid;
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  margin-left: 16px;
+  transition: grid-template-rows var(--dur-slow) var(--ease-out-soft),
+              opacity var(--dur-base) var(--ease-out-soft);
+}
+.etabook-toc-h2-wrap[data-open] .etabook-toc-sub {
+  grid-template-rows: 1fr;
+  opacity: 1;
+}
+.etabook-toc-sub-inner { min-height: 0; }
+
+.etabook-toc-h3 {
+  display: block;
+  cursor: pointer;
+  padding: 4px 10px 4px 12px;
+  border-radius: 6px;
+  color: var(--fg-subtle);
+  font-size: 11.5px;
+  font-weight: 400;
+  text-decoration: none;
+  position: relative;
+  transition: color var(--dur-fast) var(--ease-out-soft),
+              background-color var(--dur-fast) var(--ease-out-soft),
+              transform var(--dur-fast) var(--ease-out-soft);
+}
+.etabook-toc-h3::before {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 2px;
+  height: 0;
+  border-radius: 2px;
+  background: var(--accent-soft);
+  transition: height var(--dur-base) var(--ease-out-soft);
+}
+.etabook-toc-h3:hover {
+  color: var(--fg-primary);
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  transform: translateX(2px);
+}
+.etabook-toc-h3:hover::before { height: 10px; }
+.etabook-toc-h3[data-active] { color: var(--accent-strong); font-weight: 500; }
+.etabook-toc-h3[data-active]::before { height: 12px; background: var(--accent); }
+
+/* ── Collapsed mode (narrow viewport) — a vertical line of nodes ──
+   The rail shrinks to a thin column with one dot per H2, sitting on a
+   vertical guide line; the active section's dot is emphasized. Hovering
+   the rail expands it back to the full panel above. */
+.etabook-toc-rail[data-collapsed] { width: 16px; }
+.etabook-toc-rail[data-collapsed] .etabook-toc {
+  width: 16px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 8px 0;
+  opacity: 0.9;
+  position: relative;
+  overflow: visible;
+  transition: width var(--dur-base) var(--ease-out-soft),
+              background-color var(--dur-base) var(--ease-out-soft);
+}
+/* the guide line spanning the dots */
+.etabook-toc-rail[data-collapsed] .etabook-toc::before {
+  content: "";
+  position: absolute;
+  left: 7px;
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--accent) 22%, var(--border));
+}
+.etabook-toc-rail[data-collapsed] .etabook-toc-caption { display: none; }
+.etabook-toc-rail[data-collapsed] .etabook-toc-sub { display: none; }
+
+/* each H2 collapses to a dot on the line; text clipped away */
+.etabook-toc-rail[data-collapsed] .etabook-toc-h2 {
+  max-width: 16px;
+  height: 14px;
+  padding: 0;
+  color: transparent;
+  background: none;
+  transform: none;
+  overflow: hidden;
+}
+.etabook-toc-rail[data-collapsed] .etabook-toc-h2::before {
+  left: 4px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border-strong);
+}
+.etabook-toc-rail[data-collapsed] .etabook-toc-h2[data-active]::before {
+  left: 3px;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+/* dots still react to per-item hover (emphasize) */
+.etabook-toc-rail[data-collapsed] .etabook-toc-h2:hover { background: none; }
+.etabook-toc-rail[data-collapsed] .etabook-toc-h2[data-hovered]::before {
+  left: 3px;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+}
+/* keep wraps compact so dots stack tightly */
+.etabook-toc-rail[data-collapsed] .etabook-toc-h2-wrap { padding: 1px 0; }
+
+/* ── Overlay mode — the collapsed rail revealed by hover. Renders the full
+   panel as a transient popover floating over the editor content (never masks
+   text at rest; only while deliberately hovered). Translucent so the text
+   beneath stays visible through it. */
+.etabook-toc-rail[data-overlay] { z-index: 30; }
+.etabook-toc-rail[data-overlay] .etabook-toc {
+  opacity: 0.9;
+  background: color-mix(in srgb, var(--bg-elevated) 68%, transparent);
+  box-shadow: var(--shadow-lg);
+}
