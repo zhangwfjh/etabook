@@ -191,7 +191,24 @@ export const BlockSourceEdit = Extension.create({
      */
     function startEditAtPos(view: EditorView, pos: number): boolean {
       if (active) return false
-      const $pos = view.state.doc.resolve(pos)
+      const doc = view.state.doc
+      // Atom nodes (image/video/audio) live at depth 0 — a click on them
+      // resolves to the position BETWEEN top-level siblings, not inside a
+      // block. Use nodeAt() to check for a top-level atom first.
+      const atomAtPos = doc.nodeAt(pos)
+      if (atomAtPos && atomAtPos.isAtom && atomAtPos.isBlock && !SKIP_TYPES[atomAtPos.type.name]) {
+        const from = pos
+        const to = from + atomAtPos.nodeSize
+        const blockEl = view.nodeDOM(from) as HTMLElement | null
+        const minHeight = blockEl ? blockEl.getBoundingClientRect().height : 0
+        const mgr = getMarkdownManager()
+        const md = mgr.serialize({ type: 'doc', content: [atomAtPos.toJSON()] } as JSONContent)
+        startEdit(view, from, to, md, minHeight)
+        return true
+      }
+      // Content-bearing blocks (paragraph, heading): click resolves to
+      // depth >= 1 inside the block.
+      const $pos = doc.resolve(pos)
       if ($pos.depth < 1) return false
       const node = $pos.node(1)
       if (!node || SKIP_TYPES[node.type.name]) return false
@@ -219,11 +236,18 @@ export const BlockSourceEdit = Extension.create({
             return null as Editing | null
           },
           apply(tr, oldValue) {
-            const meta = tr.getMeta(key) as { type: string; from?: number; to?: number } | undefined
-            if (meta?.type === 'start' && meta.from != null && meta.to != null) {
-              return { from: meta.from, to: meta.to }
+            const meta = tr.getMeta(key)
+            if (meta && typeof meta === 'object' && 'type' in meta) {
+              const type = meta.type
+              if (type === 'start' && 'from' in meta && 'to' in meta) {
+                const from = meta.from
+                const to = meta.to
+                if (typeof from === 'number' && typeof to === 'number') {
+                  return { from, to }
+                }
+              }
+              if (type === 'stop') return null
             }
-            if (meta?.type === 'stop') return null
             const v = oldValue as Editing | null
             if (!v) return null
             if (tr.docChanged) {
@@ -234,10 +258,15 @@ export const BlockSourceEdit = Extension.create({
         },
         props: {
           handleDoubleClick(view: EditorView, pos: number) {
-            // Only trigger raw-source edit in view (read-only) mode. In edit
-            // mode the editor is WYSIWYG and double-click should select a
-            // word, not hijack the gesture into a source-edit overlay.
-            if (editor.isEditable) return false
+            // In edit mode, double-click normally selects a word. But atom
+            // nodes (image, video, audio) have no inline text to select —
+            // the gesture is wasted. Let it drop into raw-source editing so
+            // the user can edit the node's markdown (e.g. `![](url)`).
+            if (editor.isEditable) {
+              const $pos = view.state.doc.resolve(pos)
+              const node = $pos.depth >= 1 ? $pos.node(1) : null
+              if (!node || !node.isAtom) return false
+            }
             return startEditAtPos(view, pos)
           },
           decorations(state: EditorState) {

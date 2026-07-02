@@ -3,9 +3,10 @@ import {
   EditorContent,
   type Editor as TiptapEditor,
 } from '@tiptap/react'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { JSONContent } from '@tiptap/core'
 import { buildExtensions } from './extensions'
+import { forceRestoreRawBlocks } from './block-raw-focus'
 
 // Extensions are pure configuration — created once at module scope, not per
 // render. This prevents useEditor from detecting "options changed" and
@@ -37,8 +38,19 @@ export function Editor({
     },
     onCreate: ({ editor }) => onReady?.(editor),
   })
+  const prevEditable = useRef(editable)
   useEffect(() => {
-    if (editor && editable !== editor.isEditable) editor.setEditable(editable)
+    if (!editor) return
+    if (editable !== editor.isEditable) editor.setEditable(editable)
+    if (prevEditable.current !== editable) {
+      prevEditable.current = editable
+      // When switching to view mode, explicitly restore any raw-swapped
+      // block. The plugin's update() handler should do this, but the
+      // setEditable → updateState path uses the same state object, which
+      // some ProseMirror versions treat as a no-op, skipping plugin view
+      // updates. This direct call is the reliable path.
+      if (!editable) forceRestoreRawBlocks(editor)
+    }
   }, [editor, editable])
   useEffect(() => () => editor?.destroy(), [editor])
 

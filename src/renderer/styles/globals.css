@@ -272,13 +272,24 @@ body {
   border-radius: 4px;
   padding: 0.1em 0.3em;
   font-size: 0.9em;
+  font-weight: 500;
   font-family: "Cascadia Code", "Fira Code", "JetBrains Mono", monospace;
+  /* Override @tailwindcss/typography, which injects literal backtick
+     characters via code::before/code::after. The editor renders code
+     visually (monospace + shaded background); backtick delimiters are
+     only relevant in raw-source edit mode, not in the WYSIWYG view. */
+}
+
+.etabook-editor code::before,
+.etabook-editor code::after {
+  content: none;
 }
 
 .etabook-editor pre code {
   background: none;
   padding: 0;
   border-radius: 0;
+  font-weight: inherit;
 }
 
 .etabook-editor a {
@@ -291,11 +302,156 @@ body {
   opacity: 0.8;
 }
 
-.etabook-editor img {
+.etabook-editor .etabook-figure {
+  margin: 1em 0;
+  max-width: 100%;
+}
+
+/* Alignment classes — applied to the <figure> wrapper. */
+.etabook-editor .etabook-figure--left   { text-align: left; }
+.etabook-editor .etabook-figure--center { text-align: center; }
+.etabook-editor .etabook-figure--right  { text-align: right; }
+
+.etabook-editor .etabook-figure--center .etabook-figure-img-wrap,
+.etabook-editor .etabook-figure--center figcaption {
+  margin-left: auto;
+  margin-right: auto;
+}
+.etabook-editor .etabook-figure--right figcaption { margin-left: auto; }
+
+.etabook-editor .etabook-figure-img-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.etabook-editor .etabook-figure img {
   max-width: 100%;
   height: auto;
   border-radius: var(--radius-default);
-  margin: 0.75em 0;
+  display: block;
+}
+
+.etabook-editor .etabook-figure figcaption {
+  font-size: 0.85em;
+  color: var(--fg-muted);
+  font-style: italic;
+  margin-top: 0.4em;
+  line-height: 1.4;
+  max-width: 100%;
+}
+
+.etabook-editor .etabook-figure.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-default);
+}
+
+/* ── Alignment hover-buttons ───────────────────────────────────────── */
+.etabook-figure-controls {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 1px;
+  padding: 2px;
+  background-color: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out-soft);
+  z-index: 10;
+}
+
+.etabook-figure-controls.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.etabook-align-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: transparent;
+  color: var(--fg-subtle);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out-soft),
+    color var(--dur-fast) var(--ease-out-soft);
+}
+
+.etabook-align-btn:hover {
+  background-color: var(--bg-subtle);
+  color: var(--fg-primary);
+}
+
+.etabook-align-btn.is-active {
+  background-color: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}
+
+/* ── Resize handle (bottom-right corner) ───────────────────────────── */
+.etabook-resize-handle {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
+  border-bottom-right-radius: var(--radius-sm);
+  cursor: nwse-resize;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-fast) var(--ease-out-soft);
+  z-index: 10;
+}
+
+.etabook-resize-handle.is-visible {
+  opacity: 0.7;
+  pointer-events: auto;
+}
+
+.etabook-resize-handle.is-visible:hover {
+  opacity: 1;
+}
+
+/* Fallback: bare <img> not wrapped in a figure (e.g. inline images). */
+.etabook-editor img:not(.etabook-figure img) {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-default);
+  margin: 1em auto;
+  display: block;
+}
+
+.etabook-editor video {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-default);
+  margin: 1em auto;
+  display: block;
+}
+
+.etabook-editor audio {
+  width: 100%;
+  max-width: 100%;
+  margin: 1em auto;
+  display: block;
+}
+
+/* Block-level media (video/audio) selection outline. */
+.etabook-editor .ProseMirror-selectednode:has(video),
+.etabook-editor .ProseMirror-selectednode:has(audio) {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-default);
 }
 
 .etabook-editor table {

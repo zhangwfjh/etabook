@@ -2,11 +2,12 @@ import { StarterKit } from '@tiptap/starter-kit'
 import { CharacterCount } from '@tiptap/extension-character-count'
 import { TaskList } from '@tiptap/extension-task-list'
 import { TaskItem } from '@tiptap/extension-task-item'
+import { ReactNodeViewRenderer } from '@tiptap/react'
 import { Heading } from '@tiptap/extension-heading'
 import { Link } from '@tiptap/extension-link'
-import { ReactNodeViewRenderer } from '@tiptap/react'
 import { CodeBlock as PreservingCodeBlock, Code as PreservingCode } from './code-marks'
-import { Image } from '@tiptap/extension-image'
+import { Image } from './image-extension'
+import { Video, Audio } from './media'
 import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
@@ -74,11 +75,13 @@ export function buildExtensions() {
     Highlight,
     Comment,
     Link.configure({ openOnClick: false, autolink: true }),
-    Image,
+    Image.configure({ allowBase64: true, inline: false }),
     Table.configure({ resizable: true }),
     TableRow,
     TableCell,
     TableHeader,
+    Video,
+    Audio,
     AIPlan,
     Callout,
     BlockSourceEdit,

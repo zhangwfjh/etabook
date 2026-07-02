@@ -23,7 +23,7 @@
 
 import { Extension } from '@tiptap/core'
 import type { Editor, JSONContent } from '@tiptap/core'
-import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
+import { Plugin, PluginKey, TextSelection, NodeSelection } from '@tiptap/pm/state'
 import type { EditorView } from '@tiptap/pm/view'
 import type { Node as PmNode } from '@tiptap/pm/model'
 import { getMarkdownManager } from './markdown-manager'
@@ -34,10 +34,17 @@ const key = new PluginKey('blockRawFocus')
 // dirty/autosnapshot that the display transition would otherwise trigger.
 export const RAW_FOCUS_META = 'rawFocusSwap'
 
-// Only text blocks whose inline marks are worth exposing as source. Block
-// structures (tables, code blocks, math, ai-plan, images) manage their own
-// surfaces and never raw-swap.
-const RAWABLE: ReadonlySet<string> = new Set(['paragraph', 'heading'])
+// Text blocks whose inline marks are worth exposing as source, PLUS media
+// atom nodes (video/audio) whose markdown syntax (`<video src>`) is the
+// editable source. Images manage their own node-view surface (resize +
+// alignment controls) and are NOT raw-swapped. Tables, code blocks, math,
+// and ai-plan also manage their own surfaces.
+const RAWABLE: Record<string, true> = {
+  paragraph: true, heading: true, video: true, audio: true,
+}
+
+// Media atom types that always expose their markdown syntax when focused.
+const MEDIA_ATOM_TYPES: Record<string, true> = { video: true, audio: true }
 
 /**
  * Whether `node` carries inline markup worth exposing as editable markdown
@@ -59,6 +66,8 @@ function hasExposedMarkup(node: {
   forEach: (cb: (child: PmNode) => void) => void
 }): boolean {
   if (node.type.name === 'heading') return true
+  // Media atoms (image/video/audio) always expose their markdown syntax.
+  if (MEDIA_ATOM_TYPES[node.type.name]) return true
   let found = false
   node.forEach((child) => {
     if (found) return
@@ -81,7 +90,7 @@ type RawState = { rawFrom: number | null }
  */
 function readRawState(value: unknown): RawState {
   if (value && typeof value === 'object' && 'rawFrom' in value) {
-    const rawFrom = (value as { rawFrom: unknown }).rawFrom
+    const rawFrom = value.rawFrom
     return { rawFrom: typeof rawFrom === 'number' ? rawFrom : null }
   }
   return { rawFrom: null }
@@ -90,6 +99,48 @@ function readRawState(value: unknown): RawState {
 /** True iff `editor` currently has a block in raw-source display. */
 export function hasRawFocus(editor: Editor): boolean {
   return readRawState(key.getState(editor.state)).rawFrom != null
+}
+
+/**
+ * Explicitly restore any raw-swapped block back to its rendered form.
+ * Called on mode switch (edit→view) as a belt-and-suspenders trigger
+ * alongside the plugin's update() handler, which may not fire reliably
+ * when setEditable dispatches updateState with the same state object.
+ * Returns true if a restore was performed.
+ */
+export function forceRestoreRawBlocks(editor: Editor): boolean {
+  const rawFrom = readRawState(key.getState(editor.state)).rawFrom
+  if (rawFrom == null) return false
+  const doc = editor.state.doc
+  const node = doc.nodeAt(rawFrom)
+  if (!node) return false
+  const text = node.textContent
+  const mgr = getMarkdownManager()
+  let content: JSONContent[]
+  try {
+    const parsed = mgr.parse(text)
+    content = parsed?.content ?? []
+  } catch {
+    content = []
+  }
+  if (content.length === 0) content = [{ type: 'paragraph' }]
+  const schema = editor.state.schema
+  const nodes = content
+    .map((j) => {
+      try {
+        return schema.nodeFromJSON(j)
+      } catch {
+        return null
+      }
+    })
+    .filter((n): n is NonNullable<PmNode> => n !== null)
+  const to = rawFrom + node.nodeSize
+  const tr = editor.state.tr.replaceWith(rawFrom, to, nodes)
+  tr.setMeta(key, { rawFrom: null })
+  tr.setMeta(RAW_FOCUS_META, true)
+  tr.setMeta('skipTrailingNode', true)
+  editor.view.dispatch(tr)
+  return true
 }
 
 /**
@@ -108,7 +159,7 @@ export function rawFocusSerialize(editor: Editor): string | null {
   // rendered content.
   const out: JSONContent[] = []
   editor.state.doc.forEach((node, offset) => {
-    if (offset === rawFrom && RAWABLE.has(node.type.name)) {
+    if (offset === rawFrom && RAWABLE[node.type.name]) {
       const parsed = mgr.parse(node.textContent)
       const content = parsed?.content ?? [{ type: 'paragraph' }]
       out.push(...content)
@@ -123,10 +174,18 @@ export function rawFocusSerialize(editor: Editor): string | null {
 function topBlockFrom(view: EditorView): number | null {
   const sel = view.state.selection
   if (!sel) return null
+  // NodeSelection on a top-level atom (image/video/audio): the selection IS
+  // the block. NodeSelection.from is the position before the node, which is
+  // depth 0 — the standard depth>=1 path below would miss it.
+  if (sel instanceof NodeSelection) {
+    const node = sel.node
+    if (node && RAWABLE[node.type.name]) return sel.from
+    return null
+  }
   const $f = view.state.doc.resolve(sel.from)
   if ($f.depth < 1) return null
   const node = $f.node(1)
-  if (!node || !RAWABLE.has(node.type.name)) return null
+  if (!node || !RAWABLE[node.type.name]) return null
   return $f.before(1)
 }
 
@@ -140,13 +199,11 @@ export const BlockRawFocus = Extension.create({
     let applying = false
 
     function swapBlock(view: EditorView, from: number): void {
-      // `from` is the position BEFORE the top-level block (depth-0 boundary).
-      // Resolve from+1 to land inside it.
+      // `from` is the position of the top-level block (before it for
+      // content nodes, ON it for atom nodes). nodeAt() works for both.
       const doc = view.state.doc
-      const $pos = doc.resolve(from + 1)
-      if ($pos.depth < 1) return
-      const node = $pos.node(1)
-      if (!node || !RAWABLE.has(node.type.name)) return
+      const node = doc.nodeAt(from)
+      if (!node || !RAWABLE[node.type.name]) return
       // Only swap when there is inline markup to expose. A plain paragraph
       // (no marks, no inline nodes) has nothing to reveal — and its text may
       // contain syntax chars the serializer would escape, so swapping would
@@ -170,16 +227,10 @@ export const BlockRawFocus = Extension.create({
     }
 
     function restoreBlock(view: EditorView, from: number): void {
-      // `from` is the position BEFORE the top-level block. Resolve from+1.
+      // `from` is the position of the (now paragraph) block. After a swap,
+      // the original node was replaced with a paragraph containing raw text.
       const doc = view.state.doc
-      let $pos
-      try {
-        $pos = doc.resolve(from + 1)
-      } catch {
-        return
-      }
-      if ($pos.depth < 1) return
-      const node = $pos.node(1)
+      const node = doc.nodeAt(from)
       if (!node) return
       const text = node.textContent
       const mgr = getMarkdownManager()
@@ -219,7 +270,7 @@ export const BlockRawFocus = Extension.create({
           apply(tr, oldVal: RawState): RawState {
             const meta = tr.getMeta(key)
             if (meta && typeof meta === 'object' && 'rawFrom' in meta) {
-              const rawFrom = (meta as { rawFrom: unknown }).rawFrom
+              const rawFrom = meta.rawFrom
               return { rawFrom: typeof rawFrom === 'number' ? rawFrom : null }
             }
             if (tr.docChanged && oldVal.rawFrom != null) {
