@@ -1,0 +1,22 @@
+appId: com.etabook.editor
+productName: etabook
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - package.json
+extraMetadata:
+  main: ./out/main/index.js
+asar: true
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-${version}-${arch}.${ext}
+mac:
+  category: public.app-category.productivity
+linux:
+  target: AppImage
+  category: Office
