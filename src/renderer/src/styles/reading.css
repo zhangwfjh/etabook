@@ -40,8 +40,13 @@
 .prose del { color: var(--text-muted); }
 
 .prose ul,
-.prose ol { padding-left: 1.5em; margin: 0.8em 0; }
+.prose ol { padding-left: 1.6em; margin: 0.8em 0; }
+/* Tailwind Preflight resets list-style:none globally; restore with !important + explicit ::marker. */
+.prose ul { list-style: disc outside !important; }
+.prose ol { list-style: decimal outside !important; }
 .prose li { margin: 0.25em 0; }
+.prose ul li::marker { color: var(--text); font-size: 0.9em; }
+.prose ol li::marker { color: var(--text); font-variant-numeric: tabular-nums; }
 
 /* Task lists */
 .prose .contains-task-list { list-style: none; padding-left: 0; }

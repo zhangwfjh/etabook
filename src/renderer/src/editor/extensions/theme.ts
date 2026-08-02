@@ -40,10 +40,9 @@ function chromeTheme(dark: boolean): Extension {
 
 /** Token-color highlighting for the raw markdown source (Source mode + raw markup). */
 const sourceHighlight = HighlightStyle.define([
-  { tag: t.heading1, fontSize: '1.4em', fontWeight: '700', color: 'var(--text)' },
-  { tag: t.heading2, fontSize: '1.25em', fontWeight: '700', color: 'var(--text)' },
-  { tag: t.heading3, fontSize: '1.12em', fontWeight: '600', color: 'var(--text)' },
-  { tag: [t.heading4, t.heading5, t.heading6], fontWeight: '600', color: 'var(--text)' },
+  // Heading typography (size/weight/font) is controlled by line-level CSS
+  // (lp-hN-line) so it matches Reading mode exactly. Highlight only sets color.
+  { tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6], color: 'var(--text)' },
   { tag: t.strong, fontWeight: '700' },
   { tag: t.emphasis, fontStyle: 'italic' },
   { tag: t.strikethrough, textDecoration: 'line-through' },
@@ -51,7 +50,7 @@ const sourceHighlight = HighlightStyle.define([
   { tag: t.url, color: 'var(--accent)' },
   { tag: t.monospace, fontFamily: 'var(--font-mono)', color: 'var(--text)' },
   { tag: t.quote, color: 'var(--text-muted)', fontStyle: 'italic' },
-  { tag: t.list, color: 'var(--accent)' },
+  { tag: t.list, color: 'var(--text)' },
   { tag: t.processingInstruction, color: 'var(--text-muted)' },
   { tag: t.meta, color: 'var(--text-muted)' }
 ])

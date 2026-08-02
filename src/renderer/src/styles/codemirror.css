@@ -1,22 +1,26 @@
 /* CodeMirror chrome overrides — maps the editor surface to the design tokens.
    Scroller, gutter, cursor, selection, active line all live here so the editor
-   reads as part of the app, not a foreign widget. */
+   reads as part of the app, not a foreign widget.
+   !important is required because CodeMirror injects its base-theme CSS at
+   runtime AFTER our stylesheet, winning on equal specificity. */
 
+/* --- Base editor chrome (applies to Source + Live) --- */
 .cm-editor {
   height: 100%;
   background: transparent;
   color: var(--text);
-  font-family: var(--font-sans);
-  font-size: 16px;
+  font-family: var(--font-sans) !important;
+  font-size: 16px !important;
 }
-.cm-editor.cm-focused {
-  outline: none;
-}
+.cm-editor.cm-focused { outline: none; }
 
 .cm-scroller {
-  font-family: var(--font-sans);
-  line-height: 1.65;
+  font-family: var(--font-sans) !important;
+  line-height: 1.65 !important;
   padding: 16px 0;
+  /* Reserve space for the scrollbar so content doesn't shift 5px when it
+     appears/disappears during scroll. */
+  scrollbar-gutter: stable;
 }
 
 .cm-gutters {
@@ -24,152 +28,212 @@
   border-right: 1px solid var(--border);
   color: var(--text-muted);
 }
-.cm-activeLineGutter {
-  background: var(--surface-2);
-  color: var(--text);
-}
-
-.cm-activeLine {
-  background: var(--accent-soft);
-}
+.cm-activeLineGutter { background: var(--surface-2); color: var(--text); }
+.cm-activeLine { background: var(--accent-soft); }
 .cm-selectionBackground,
-.cm-editor ::selection {
-  background: var(--accent-soft);
-}
-
+.cm-editor ::selection { background: var(--accent-soft); }
 .cm-cursor,
-.cm-cursor-primary {
-  border-left-color: var(--accent);
-  border-left-width: 2px;
-}
+.cm-cursor-primary { border-left-color: var(--accent); border-left-width: 2px; }
 
-.cm-content {
-  caret-color: var(--accent);
+/* ============================================================================
+   LIVE PREVIEW — every value mirrors reading.css so Live == Reading visually.
+   ========================================================================== */
+
+/* Body text — Fraunces serif, matching .prose.
+   Only .cm-content gets max-width + centering; the scroller must stay
+   full-width so it fills the editor pane and the scrollbar sits at the
+   right edge. Constraining the scroller makes its width fluctuate when
+   the scrollbar appears/disappears — the "canvas width changes" bug. */
+.editor-live .cm-scroller {
+  font-family: var(--font-serif) !important;
+  font-size: 1.05rem !important;
+  line-height: 1.7 !important;
+}
+.editor-live .cm-content {
   max-width: var(--measure);
-  padding-left: 24px;
+  margin-inline: auto;
+  padding-inline: 32px;
+  /* CM6's lineWrapping sets flexShrink:1, which lets .cm-content shrink to
+     its widest line instead of filling the scroller. With margin-inline:auto
+     that shrunken box then recenters on every content change — the visible
+     "width jumps" bug. Pin width:100% + flexShrink:0 so the content box is
+     always full-width up to the max-width cap. */
+  width: 100%;
+  flex-shrink: 0;
+}
+.editor-live .cm-line {
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
 }
 
-/* Reading measure rule down the center of the editor surface. */
-.cm-line {
-  padding-left: 0;
-  padding-right: 0;
-}
-
-/* --- Live preview rendered classes (emitted by livePreview.ts) --- */
-.lp-heading {
-  font-family: var(--font-serif);
-  font-weight: 600;
+/* Headings — from .prose h1..h6 */
+.editor-live .cm-line.lp-h1-line {
+  font-family: var(--font-serif) !important;
+  font-size: 2.1em !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
   letter-spacing: -0.01em;
-  color: var(--text);
+  padding-top: 0.4em;
+  padding-bottom: 0.15em;
 }
-.lp-h1 { font-size: 1.9em; line-height: 1.2; }
-.lp-h2 { font-size: 1.55em; line-height: 1.25; }
-.lp-h3 { font-size: 1.3em; line-height: 1.3; }
-.lp-h4 { font-size: 1.15em; }
-.lp-h5 { font-size: 1.05em; }
-.lp-h6 { font-size: 1em; color: var(--text-muted); }
+.editor-live .cm-line.lp-h2-line {
+  font-family: var(--font-serif) !important;
+  font-size: 1.65em !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em;
+  border-bottom: 1px solid var(--border);
+  padding-top: 0.35em;
+  padding-bottom: 0.2em;
+}
+.editor-live .cm-line.lp-h3-line {
+  font-family: var(--font-serif) !important;
+  font-size: 1.35em !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em;
+  padding-top: 0.3em;
+}
+.editor-live .cm-line.lp-h4-line {
+  font-family: var(--font-serif) !important;
+  font-size: 1.15em !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em;
+  padding-top: 0.2em;
+}
+.editor-live .cm-line.lp-h5-line {
+  font-family: var(--font-serif) !important;
+  font-size: 1em !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em;
+  padding-top: 0.15em;
+  color: var(--text-muted);
+}
+.editor-live .cm-line.lp-h6-line {
+  font-family: var(--font-serif) !important;
+  font-size: 1em !important;
+  font-weight: 600 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.01em;
+  padding-top: 0.15em;
+  color: var(--text-muted);
+}
 
-.lp-strong { font-weight: 700; }
-.lp-em { font-style: italic; }
-.lp-strike { text-decoration: line-through; color: var(--text-muted); }
+/* List item indentation */
+.editor-live .cm-line.lp-list-line { padding-left: 1.6em; }
 
-.lp-code {
-  font-family: var(--font-mono);
-  font-size: 0.88em;
+/* Empty separator lines — collapsed for paragraph rhythm */
+.editor-live .cm-line.lp-blank { line-height: 0.4 !important; min-height: 0.4em; }
+
+/* Blockquote — from .prose blockquote */
+.editor-live .cm-line.lp-quote-line {
+  padding-left: 1em;
+  padding-top: 0.2em;
+  padding-bottom: 0.2em;
+  border-left: 3px solid var(--accent);
+  color: var(--text-muted);
+  font-style: italic !important;
+}
+
+/* Fenced-code lines — match .prose pre */
+.editor-live .cm-line.lp-code-line {
+  font-family: var(--font-mono) !important;
+  font-size: 0.85em !important;
+  line-height: 1.5 !important;
+  padding-left: 16px;
+  padding-right: 16px;
+  background: var(--surface);
+}
+.editor-live .cm-line.lp-code-line.lp-code-first {
+  border-top-left-radius: 8px;
+  border-top-right-radius: 8px;
+  box-shadow: inset 1px 1px 0 var(--border), inset -1px 0 0 var(--border);
+  padding-top: 14px;
+}
+.editor-live .cm-line.lp-code-line.lp-code-last {
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
+  box-shadow: inset -1px -1px 0 var(--border), inset 1px 0 0 var(--border);
+  padding-bottom: 14px;
+}
+.editor-live .cm-line.lp-code-line:not(.lp-code-first):not(.lp-code-last) {
+  box-shadow: inset -1px 0 0 var(--border), inset 1px 0 0 var(--border);
+}
+
+/* Inline content marks — from .prose */
+.lp-strong { font-weight: 700 !important; }
+.lp-em { font-style: italic !important; }
+.lp-strike { text-decoration: line-through !important; color: var(--text-muted); }
+.lp-inline-code {
+  font-family: var(--font-mono) !important;
+  font-size: 0.88em !important;
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.1em 0.35em;
 }
-
-.lp-link,
-.lp-url {
-  color: var(--accent);
-  text-decoration: underline;
+.lp-link {
+  color: var(--accent) !important;
+  text-decoration: underline !important;
   text-underline-offset: 2px;
 }
 
-.lp-quote {
-  color: var(--text-muted);
-  font-style: italic;
-  background: linear-gradient(to right, var(--accent), transparent) left / 2px 100% no-repeat;
-  padding-left: 12px;
+/* List markers */
+.lp-list-marker {
+  display: inline-block;
+  min-width: 1.2em;
+  margin-right: 0.35em;
+  text-align: center;
+  user-select: none;
+}
+.lp-bullet { color: var(--text); }
+.lp-task {
+  accent-color: var(--accent);
+  cursor: pointer;
+  width: 1em;
+  height: 1em;
+  margin-right: 0.35em;
+  vertical-align: -0.15em;
 }
 
+/* HR — block widget. Use padding (not margin) so offsetHeight includes
+   the spacing — margin-collapse makes CodeMirror's measured widget height
+   differ from its visual footprint, breaking posAtCoords. */
 .lp-hr {
   border: none;
   border-top: 1px solid var(--border);
-  height: 1px;
-  margin: 0.75em 0;
+  padding: 2em 0 0 0;
 }
 
-.lp-list-bullet {
-  color: var(--accent);
-  user-select: none;
-  display: inline-block;
-  min-width: 1.4em;
-}
+/* Tables — block widget. Same margin→padding reasoning as HR. */
+.lp-table-wrap { padding: 1em 0; }
+.lp-table-wrap table { border-collapse: collapse; width: 100%; }
+.lp-table-wrap th,
+.lp-table-wrap td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; }
+.lp-table-wrap th { background: var(--surface-2); font-weight: 600; }
+.lp-table-wrap code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surface-2); padding: 0.1em 0.3em; border-radius: 3px; }
 
-.lp-task {
-  margin-right: 0.4em;
-  vertical-align: middle;
-  accent-color: var(--accent);
-  cursor: pointer;
-}
-
-/* Fenced code block chrome (line widget). */
-.lp-code-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-family: var(--font-mono);
-  font-size: 0.72em;
-  color: var(--text-muted);
-  padding: 2px 8px;
-  border-top: 1px solid var(--border);
-}
-.lp-code-meta button {
-  background: transparent;
-  border: none;
-  color: var(--text-muted);
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.95em;
-  padding: 2px 6px;
-  border-radius: 4px;
-  transition: color 150ms ease-out, background 150ms ease-out;
-}
-.lp-code-meta button:hover {
-  color: var(--accent);
-  background: var(--accent-soft);
-}
-
-/* Tables in live preview. */
-.lp-table {
-  border-collapse: collapse;
-}
-.lp-table td,
-.lp-table th {
-  border: 1px solid var(--border);
-  padding: 2px 6px;
-}
-
-/* Search panel (find/replace) — themed to tokens. */
-.cm-panels {
-  background: var(--surface);
-  border-color: var(--border);
-  color: var(--text);
-}
+/* Search panel (find/replace) */
+.cm-panels { background: var(--surface); border-color: var(--border); color: var(--text); }
 .cm-panels input {
   background: var(--surface-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
 }
-.cm-panels button[name="close"] {
-  color: var(--text-muted);
+.cm-panels button[name="close"] { color: var(--text-muted); }
+.cm-textfield { background: var(--surface-2); color: var(--text); }
+.editor-source .cm-scroller {
+  font-family: var(--font-sans) !important;
 }
-.cm-textfield {
-  background: var(--surface-2);
-  color: var(--text);
+.editor-source .cm-content {
+  font-family: var(--font-sans) !important;
+  max-width: var(--measure);
+  margin-inline: auto;
+  padding-inline: 32px;
+  width: 100%;
+  flex-shrink: 0;
 }

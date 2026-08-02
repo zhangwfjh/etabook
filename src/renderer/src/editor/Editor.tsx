@@ -8,7 +8,7 @@ import {
   readonlyCompartment
 } from './extensions/core'
 import { editorTheme, themeCompartment } from './extensions/theme'
-import { livePreviewPlugin } from './extensions/livePreview'
+import { livePreviewPlugin, setLivePreviewTheme } from './extensions/livePreview'
 import { slashCommands } from './extensions/slash'
 
 export type EditorProps = {
@@ -86,8 +86,9 @@ export function Editor(props: EditorProps): React.JSX.Element {
     })
   }, [props.docId, props.doc])
 
-  // Reconfigure theme on dark toggle.
+  // Reconfigure theme on dark toggle + sync the live-preview render theme.
   useEffect(() => {
+    setLivePreviewTheme(props.dark ? 'dark' : 'light')
     viewRef.current?.dispatch({
       effects: themeCompartment.reconfigure(editorTheme(props.dark))
     })
@@ -125,5 +126,5 @@ export function Editor(props: EditorProps): React.JSX.Element {
     })
   }, [props.livePreview, props.docDir])
 
-  return <div ref={hostRef} className="h-full w-full overflow-hidden" />
+  return <div ref={hostRef} className={`h-full w-full overflow-hidden ${props.livePreview ? 'editor-live' : 'editor-source'}`} />
 }

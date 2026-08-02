@@ -4,49 +4,81 @@ import {
   ViewPlugin,
   type ViewUpdate,
   WidgetType,
-  EditorView
+  EditorView,
 } from '@codemirror/view'
-import { Prec, type Extension, type EditorState } from '@codemirror/state'
-import { syntaxTree } from '@codemirror/language'
-import { resolveAsset } from '@renderer/lib/fs'
+import { Prec, StateField, type Extension, type EditorState, type Range } from '@codemirror/state'
+import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 
 /**
- * Live Preview — Obsidian/Typora-style render-in-place.
+ * Live Preview — inline decoration engine.
  *
- * Walks the Lezer markdown tree and emits decorations that:
- *  - HIDE markup (`#`, `**`, `` ` ``, `>`, `[]()`) on lines WITHOUT the cursor;
- *  - MARK rendered spans (headings, bold, italic, code chips, quotes, links);
- *  - WIDGET-replace list markers, task checkboxes, images, thematic breaks.
+ * Line heights depend ONLY on CSS class, not on whether syntax tokens are
+ * visible. A heading line styled .lp-h1-line is the same height whether
+ * the `# ` prefix is currently hidden or revealed. This eliminates the
+ * layout-shift ("vibrating") problem that block-widget-replacement causes.
  *
- * Rebuilt only when doc/selection/viewport changes (performance gate, per plan).
+ * Three layers:
+ *   1. Line classes (unconditional): font-size/weight/family per block type.
+ *   2. Inline marks (unconditional): bold/italic/code-chip on content.
+ *   3. Hide decorations (inactive lines only): `Decoration.replace({})` on
+ *      markup tokens (`#`, `**`, `` ` ``, `>`) so they vanish from flow
+ *      without changing the line's measured height.
  */
 
-// Doc dir is passed via the plugin factory; stored module-level so the
-// builder reads it without plumbing it through every call.
-let currentDocDir: string | undefined
+// ---- Line class mapping ----------------------------------------------------
 
-class LivePreviewPlugin {
-  decorations: DecorationSet
-  constructor(view: EditorView) {
-    this.decorations = buildDecorations(view)
-  }
-  update(update: ViewUpdate): void {
-    if (update.docChanged || update.selectionSet || update.viewportChanged) {
-      this.decorations = buildDecorations(update.view)
-    }
-  }
+const LINE_CLASS_BY_BLOCK: Record<string, string> = {
+  ATXHeading1: 'lp-h1-line',
+  ATXHeading2: 'lp-h2-line',
+  ATXHeading3: 'lp-h3-line',
+  ATXHeading4: 'lp-h4-line',
+  ATXHeading5: 'lp-h5-line',
+  ATXHeading6: 'lp-h6-line',
+  SetextHeading1: 'lp-h1-line',
+  SetextHeading2: 'lp-h2-line',
+  Blockquote: 'lp-quote-line',
+  FencedCode: 'lp-code-line'
 }
 
-function cursorOnLine(state: EditorState, from: number, to: number): boolean {
-  const lineFrom = state.doc.lineAt(from).from
-  const lineTo = state.doc.lineAt(to).to
-  for (const range of state.selection.ranges) {
-    if (range.from <= lineTo && range.to >= lineFrom) return true
-  }
-  return false
+// Syntax tokens to HIDE on inactive (non-cursor) lines.
+const HIDEABLE_SYNTAX = new Set([
+  'HeaderMark',
+  'EmphasisMark',
+  'CodeMark',
+  'CodeInfo',
+  'LinkMark',
+  'LinkTitle',
+  'StrikethroughMark',
+  'QuoteMark'
+])
+
+// Inline content marks applied UNCONDITIONALLY (always styled).
+const INLINE_MARK_CLASS: Record<string, string> = {
+  StrongEmphasis: 'lp-strong',
+  Emphasis: 'lp-em',
+  InlineCode: 'lp-inline-code',
+  Strikethrough: 'lp-strike',
+  Link: 'lp-link',
+  URL: 'lp-url'
 }
 
-// --- Widgets -----------------------------------------------------------------
+// ---- Widgets ---------------------------------------------------------------
+
+class BulletWidget extends WidgetType {
+  override eq(): boolean {
+    return true
+  }
+  override toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'lp-list-marker lp-bullet'
+    span.textContent = '•'
+    return span
+  }
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+const BULLET_WIDGET = new BulletWidget()
 
 class TaskCheckboxWidget extends WidgetType {
   constructor(readonly checked: boolean, readonly pos: number) {
@@ -59,52 +91,22 @@ class TaskCheckboxWidget extends WidgetType {
     const input = document.createElement('input')
     input.type = 'checkbox'
     input.checked = this.checked
-    input.className = 'lp-task'
-    input.addEventListener('mousedown', (e) => e.preventDefault())
-    input.addEventListener('change', () => {
-      const mark = this.checked ? '[x]' : '[ ]'
-      const next = this.checked ? '[ ]' : '[x]'
-      view.dispatch({ changes: { from: this.pos, to: this.pos + mark.length, insert: next } })
+    input.className = 'lp-list-marker lp-task'
+    input.setAttribute('contenteditable', 'false')
+    input.addEventListener('mousedown', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+    })
+    input.addEventListener('click', () => {
+      const pos = view.posAtDOM(input)
+      const current = view.state.doc.sliceString(pos, pos + 3)
+      const next = /\[x\]/i.test(current) ? '[ ]' : '[x]'
+      view.dispatch({ changes: { from: pos, to: pos + 3, insert: next } })
     })
     return input
   }
-  override ignoreEvent(): boolean {
-    return false
-  }
-}
-
-class ListBulletWidget extends WidgetType {
-  constructor(readonly text: string) {
-    super()
-  }
-  override eq(o: ListBulletWidget): boolean {
-    return o.text === this.text
-  }
-  override toDOM(): HTMLElement {
-    const span = document.createElement('span')
-    span.className = 'lp-list-bullet'
-    span.textContent = this.text
-    return span
-  }
-}
-
-class ImageWidget extends WidgetType {
-  constructor(readonly src: string, readonly alt: string) {
-    super()
-  }
-  override eq(o: ImageWidget): boolean {
-    return o.src === this.src
-  }
-  override toDOM(): HTMLElement {
-    const img = document.createElement('img')
-    img.src = this.src
-    img.alt = this.alt
-    img.className = 'lp-image'
-    img.style.maxWidth = '100%'
-    img.style.borderRadius = '6px'
-    img.style.display = 'block'
-    img.style.margin = '0.5em 0'
-    return img
+  override ignoreEvent(event: Event): boolean {
+    return event.type === 'mousedown' || event.type === 'click'
   }
 }
 
@@ -116,116 +118,379 @@ class HrWidget extends WidgetType {
   }
 }
 
-// --- Decoration builder ------------------------------------------------------
+// ---- Decoration builder ----------------------------------------------------
 
-type DecoSpec = {
-  from: number
-  to: number
-  value: ReturnType<typeof Decoration.mark> | ReturnType<typeof Decoration.replace> | ReturnType<typeof Decoration.widget>
+function cursorOnLine(state: EditorState, from: number, to: number): boolean {
+  const lineFrom = state.doc.lineAt(from).from
+  const lineTo = state.doc.lineAt(to).to
+  for (const range of state.selection.ranges) {
+    if (range.from <= lineTo && range.to >= lineFrom) return true
+  }
+  return false
 }
-
-const MARKUP_MARKS = new Set([
-  'HeaderMark',
-  'EmphasisMark',
-  'StrikethroughMark',
-  'CodeMark',
-  'QuoteMark',
-  'LinkMark'
-])
 
 function buildDecorations(view: EditorView): DecorationSet {
   const { state } = view
-  const docDir = currentDocDir
-  const decos: DecoSpec[] = []
-
-  // Heading nodes are named ATXHeading1..6 / SetextHeading1..2; derive level.
-  const headingLevelClass = (nodeName: string): string => {
-    const m = nodeName.match(/Heading([1-6])/)
-    return `lp-h${m ? m[1] : 1}`
+  const { doc } = state
+  const ranges: Range<Decoration>[] = []
+  const listItemDepths = new Map<number, number>()
+  // Collect active (cursor) line numbers.
+  const activeLines = new Set<number>()
+  if (view.hasFocus) {
+    for (const r of state.selection.ranges) {
+      const first = doc.lineAt(r.from).number
+      const last = doc.lineAt(r.to).number
+      for (let n = first; n <= last; n++) activeLines.add(n)
+    }
   }
 
-  for (const range of view.visibleRanges) {
-    syntaxTree(state).iterate({
-      from: range.from,
-      to: range.to,
-      enter(node) {
-        const name = node.name
-        const from = node.from
-        const to = node.to
+  // Force full-doc parse coverage so decorations cover everything.
+  const tree = ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state)
 
-        if (/^(ATX|Setext)Heading[1-6]$/.test(name)) {
-          decos.push({ from, to, value: Decoration.mark({ class: `lp-heading ${headingLevelClass(name)}` }) })
-          return
-        }
+  tree.iterate({
+    enter(node) {
+      const name = node.name
+      const from = node.from
+      const to = node.to
+      if (from >= to) return
 
-        // Hide markup marks (#, **, `, >, []) unless the cursor is on this line.
-        if (MARKUP_MARKS.has(name) && !cursorOnLine(state, from, to)) {
-          decos.push({ from, to, value: Decoration.replace({}) })
-          return
-        }
-
-        if (name === 'StrongEmphasis') decos.push({ from, to, value: Decoration.mark({ class: 'lp-strong' }) })
-        if (name === 'Emphasis') decos.push({ from, to, value: Decoration.mark({ class: 'lp-em' }) })
-        if (name === 'Strikethrough') decos.push({ from, to, value: Decoration.mark({ class: 'lp-strike' }) })
-        if (name === 'InlineCode' || name === 'CodeText') decos.push({ from, to, value: Decoration.mark({ class: 'lp-code' }) })
-        if (name === 'Link') decos.push({ from, to, value: Decoration.mark({ class: 'lp-link' }) })
-        if (name === 'URL') decos.push({ from, to, value: Decoration.mark({ class: 'lp-url' }) })
-        if (name === 'Blockquote') decos.push({ from, to, value: Decoration.mark({ class: 'lp-quote' }) })
-
-        if (name === 'ListMark' && !cursorOnLine(state, from, to)) {
-          const text = state.doc.sliceString(from, to)
-          if (/^\d+\./.test(text)) {
-            decos.push({ from, to, value: Decoration.replace({ widget: new ListBulletWidget(text + ' ') }) })
-          } else {
-            decos.push({ from, to, value: Decoration.replace({ widget: new ListBulletWidget('• ') }) })
+      // --- 1. Line classes (unconditional) ---
+      // Expand fenced-code active lines: clicking any line of a fence
+      // activates the whole block so marks hide/reveal consistently.
+      if (name === 'FencedCode') {
+        const firstLine = doc.lineAt(from).number
+        const lastLine = doc.lineAt(to).number
+        let anyActive = false
+        for (let n = firstLine; n <= lastLine; n++) {
+          if (activeLines.has(n)) {
+            anyActive = true
+            break
           }
         }
-
-        if (name === 'TaskMarker' && !cursorOnLine(state, from, to)) {
-          const text = state.doc.sliceString(from, to)
-          const checked = /\[x\]/i.test(text)
-          decos.push({ from, to, value: Decoration.replace({ widget: new TaskCheckboxWidget(checked, from) }) })
-        }
-
-        if (name === 'HorizontalRule' && !cursorOnLine(state, from, to)) {
-          decos.push({ from, to, value: Decoration.replace({ widget: new HrWidget() }) })
-        }
-
-        if (name === 'Image' && !cursorOnLine(state, from, to)) {
-          let src = ''
-          let alt = ''
-          // node.node is the full SyntaxNode (has children); SyntaxNodeRef doesn't.
-          const full = node.node
-          if (full) {
-            for (let child = full.firstChild; child; child = child.nextSibling) {
-              if (child.name === 'URL') src = state.doc.sliceString(child.from, child.to)
-              if (child.name === 'LinkLabel') alt = state.doc.sliceString(child.from, child.to)
-            }
-          }
-          if (!src || !alt) {
-            const raw = state.doc.sliceString(from, to)
-            const m = raw.match(/^!\[([\s\S]*)\]\(([\s\S]*?)\)$/)
-            if (m) {
-              if (!alt) alt = m[1]
-              if (!src) src = m[2]
-            }
-          }
-          decos.push({ from, to, value: Decoration.replace({ widget: new ImageWidget(resolveAsset(src, docDir), alt) }) })
+        if (anyActive) {
+          for (let n = firstLine; n <= lastLine; n++) activeLines.add(n)
         }
       }
-    })
+
+      // Table: expand active lines like FencedCode so the whole table
+      // reveals its raw source when the cursor enters any line.
+      if (name === 'Table') {
+        const firstLine = doc.lineAt(from).number
+        const lastLine = doc.lineAt(to).number
+        let anyActive = false
+        for (let n = firstLine; n <= lastLine; n++) {
+          if (activeLines.has(n)) { anyActive = true; break }
+        }
+        if (anyActive) {
+          for (let n = firstLine; n <= lastLine; n++) activeLines.add(n)
+        }
+      }
+
+      // Line classes — apply to every line of the block.
+      // FencedCode gets first/last variants for border + rounded corners.
+      const lineClass = LINE_CLASS_BY_BLOCK[name]
+      if (lineClass) {
+        const firstLine = doc.lineAt(from)
+        const lastLine = doc.lineAt(to)
+        for (let n = firstLine.number; n <= lastLine.number; n++) {
+          const line = doc.line(n)
+          let cls = lineClass
+          if (name === 'FencedCode') {
+            if (n === firstLine.number) cls += ' lp-code-first'
+            if (n === lastLine.number) cls += ' lp-code-last'
+          }
+          ranges.push(Decoration.line({ class: cls }).range(line.from))
+        }
+      }
+
+      // --- 2. Inline marks (unconditional) ---
+      const markClass = INLINE_MARK_CLASS[name]
+      if (markClass) {
+        ranges.push(Decoration.mark({ class: markClass }).range(from, to))
+      }
+
+      // --- 3. Hide decorations (inactive lines only) ---
+      if (HIDEABLE_SYNTAX.has(name)) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          let hideTo = to
+          // HeaderMark / QuoteMark swallow trailing space so the hidden
+          // state doesn't read indented.
+          if (name === 'HeaderMark' || name === 'QuoteMark') {
+            while (hideTo < doc.length && doc.sliceString(hideTo, hideTo + 1) === ' ') {
+              hideTo++
+            }
+          }
+          pushReplace(ranges, doc, from, hideTo)
+        }
+      }
+
+      // URL inside a Link: hide the destination `(url)` on inactive lines.
+      if (name === 'URL' && from < to) {
+        const parent = node.node?.parent
+        if (parent?.name === 'Link') {
+          const lineNum = doc.lineAt(from).number
+          if (!activeLines.has(lineNum)) {
+            // Hide from the `(` before the URL to the `)` after.
+            const parenFrom = from > 0 && doc.sliceString(from - 1, from) === '(' ? from - 1 : from
+            const parenTo = doc.sliceString(to, to + 1) === ')' ? to + 1 : to
+            pushReplace(ranges, doc, parenFrom, parenTo)
+          }
+        }
+      }
+
+      // --- 4. List marker widgets ---
+      if (name === 'ListMark' && from < to) {
+        const line = doc.lineAt(from)
+        const lineNum = line.number
+        // Compute nesting depth by counting ListItem ancestors.
+        let depth = 0
+        for (let p = node.node?.parent; p; p = p.parent) {
+          if (p.name === 'ListItem') depth++
+        }
+        listItemDepths.set(lineNum, depth)
+        const taskLead = line.text.match(/^(\s*[-*+]\s+)\[[ xX]\]/)
+        const taskFrom = taskLead != null ? line.from + taskLead[1].length : undefined
+        if (!activeLines.has(lineNum)) {
+          if (taskFrom !== undefined) {
+            pushReplace(ranges, doc, from, taskFrom)
+          } else {
+            const markText = doc.sliceString(from, to)
+            if (markText === '-' || markText === '*' || markText === '+') {
+              const hasSpace = doc.sliceString(to, to + 1) === ' '
+              pushReplace(ranges, doc, from, hasSpace ? to + 1 : to, {
+                widget: BULLET_WIDGET
+              })
+            }
+          }
+        }
+      }
+
+      // Task checkbox widget.
+      if (name === 'TaskMarker' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        // Ensure task lines are tracked as list items too.
+        if (!listItemDepths.has(lineNum)) listItemDepths.set(lineNum, 1)
+        if (!activeLines.has(lineNum)) {
+          const text = doc.sliceString(from, to)
+          const checked = /\[x\]/i.test(text)
+          pushReplace(ranges, doc, from, to, {
+            widget: new TaskCheckboxWidget(checked, from)
+          })
+        }
+      }
+
+      // Tables: rendered as block widgets by the StateField (not inline) so
+      // the cursor positioning modifications from the inline approach are reverted.
+      // Image: hide source syntax on inactive lines (block widget renders below).
+      if (name === 'Image' && from < to && !cursorOnLine(state, from, to)) {
+        pushReplace(ranges, doc, from, to)
+      }
+      // HR handled by block StateField (below) since it's a block widget.
+    }
+  })
+
+  // Blank lines are NOT collapsed — line-height collapse causes cursor overlay
+  // during the rebuild gap when the cursor enters (Obsidian doesn't collapse).
+  // Tables are rendered as block widgets by the StateField.
+  const lineCount = doc.lines
+  for (let n = 1; n <= lineCount; n++) {
+    const line = doc.line(n)
+    if (listItemDepths.has(n)) {
+      const depth = listItemDepths.get(n)!
+      const indent = 1.5 + (depth - 1) * 1.5
+      ranges.push(Decoration.line({ class: 'lp-list-line', attributes: { style: `padding-left: ${indent}em` } }).range(line.from))
+    }
   }
-  // Decoration.set sorts internally (input is in tree-walk order, not fully sorted).
-  return Decoration.set(decos.map((d) => d.value.range(d.from, d.to)), true)
+
+  return Decoration.set(ranges, true)
 }
 
-export function livePreviewPlugin(docDir?: string): Extension {
-  currentDocDir = docDir
+/**
+ * Push a Decoration.replace, splitting at line breaks (CM6 forbids
+ * plugin-sourced replace decorations that cross line boundaries).
+ */
+function pushReplace(
+  ranges: Range<Decoration>[],
+  doc: EditorState['doc'],
+  from: number,
+  to: number,
+  spec: Parameters<typeof Decoration.replace>[0] = {}
+): void {
+  if (from >= to) return
+  const startLine = doc.lineAt(from)
+  if (to <= startLine.to) {
+    ranges.push(Decoration.replace(spec).range(from, to))
+    return
+  }
+  let cursor = from
+  let first = true
+  while (cursor < to) {
+    const line = doc.lineAt(cursor)
+    const segEnd = Math.min(to, line.to)
+    if (segEnd > cursor) {
+      ranges.push(Decoration.replace(first ? spec : {}).range(cursor, segEnd))
+      first = false
+    }
+    cursor = line.to + 1
+  }
+}
+// Table block widget — renders table markdown as HTML matching Reading mode.
+function tableMarkdownToHtml(src: string): string {
+  const lines = src.trim().split('\n').filter(l => l.trim())
+  if (lines.length < 2) return '<p>' + escapeHtml(src) + '</p>'
+  const splitRow = (line: string) => line.replace(/^\||\|$/g, '').split('|').map(c => c.trim())
+  const header = splitRow(lines[0])
+  // lines[1] is the delimiter row (| --- | --- |), skip it
+  const bodyRows = lines.slice(2).map(splitRow)
+  let html = '<table><thead><tr>'
+  for (const h of header) html += `<th>${renderInline(h)}</th>`
+  html += '</tr></thead><tbody>'
+  for (const row of bodyRows) {
+    html += '<tr>'
+    for (const cell of row) html += `<td>${renderInline(cell)}</td>`
+    html += '</tr>'
+  }
+  html += '</tbody></table>'
+  return html
+}
+
+/** Render common inline markdown within table cells → safe HTML. */
+function renderInline(text: string): string {
+  let s = escapeHtml(text)
+  // Links [text](url)
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+  // Bold/italic/strike/code (order matters: bold before italic, code last)
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>')
+  s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>')
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>')
+  return s
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// Table block widget — renders the table markdown as an HTML <table> matching Reading mode.
+class TableWidget extends WidgetType {
+  constructor(readonly src: string) { super() }
+  override eq(o: TableWidget): boolean { return o.src === this.src }
+  override toDOM(): HTMLElement {
+    const wrap = document.createElement('div')
+    wrap.className = 'lp-table-wrap'
+    wrap.innerHTML = tableMarkdownToHtml(this.src)
+    return wrap
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+// Block decorations for Tables, HorizontalRules, and Images.
+// These MUST be a StateField — CM6 forbids block decorations from ViewPlugins.
+class ImageBlockWidget extends WidgetType {
+  constructor(readonly src: string, readonly alt: string) { super() }
+  override eq(o: ImageBlockWidget): boolean { return o.src === this.src }
+  override toDOM(): HTMLElement {
+    const img = document.createElement('img')
+    img.src = this.src
+    img.style.maxWidth = '100%'
+    img.style.borderRadius = '8px'
+    img.style.padding = '1em 0'
+    img.style.display = 'block'
+    return img
+  }
+}
+
+function blockDecorationField(state: EditorState): DecorationSet {
+  const doc = state.doc
+  const ranges: Range<Decoration>[] = []
+  const activeLines = new Set<number>()
+  for (const r of state.selection.ranges) {
+    const first = doc.lineAt(r.from).number
+    const last = doc.lineAt(r.to).number
+    for (let n = first; n <= last; n++) activeLines.add(n)
+  }
+  const tree = ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state)
+  tree.iterate({
+    enter(node) {
+      if (node.name === 'Table' && node.from < node.to) {
+        const firstLineNum = doc.lineAt(node.from).number
+        const lastLineNum = doc.lineAt(node.to).number
+        let anyActive = false
+        for (let n = firstLineNum; n <= lastLineNum; n++) {
+          if (activeLines.has(n)) { anyActive = true; break }
+        }
+        if (!anyActive) {
+          const src = doc.sliceString(node.from, node.to)
+          const replaceTo = doc.lineAt(node.to).to
+          ranges.push(Decoration.replace({ block: true, widget: new TableWidget(src) }).range(node.from, replaceTo))
+        }
+      }
+      if (node.name === 'HorizontalRule' && node.from < node.to) {
+        const lineNum = doc.lineAt(node.from).number
+        if (!activeLines.has(lineNum)) {
+          ranges.push(Decoration.replace({ block: true, widget: new HrWidget() }).range(node.from, node.to))
+        }
+      }
+      if (node.name === 'Image' && node.from < node.to) {
+        const lineNum = doc.lineAt(node.from).number
+        if (!activeLines.has(lineNum)) {
+          let src = ''
+          let alt = ''
+          const full = node.node
+          if (full) {
+            for (let c = full.firstChild; c; c = c.nextSibling) {
+              if (c.name === 'URL') src = doc.sliceString(c.from, c.to)
+              if (c.name === 'LinkLabel') alt = doc.sliceString(c.from, c.to)
+            }
+          }
+          if (!src) {
+            const raw = doc.sliceString(node.from, node.to)
+            const m = raw.match(/^!\[([\s\S]*)\]\(([\s\S]*?)\)$/)
+            if (m) { alt = m[1]; src = m[2] }
+          }
+          const lineEnd = doc.lineAt(node.to).to
+          ranges.push(Decoration.widget({ block: true, widget: new ImageBlockWidget(src, alt), side: 1 }).range(lineEnd))
+        }
+      }
+    }
+  })
+  return Decoration.set(ranges, true)
+}
+
+const blockDecorations = StateField.define<DecorationSet>({
+  create(state) { return blockDecorationField(state) },
+  update(prev, tr) {
+    if (tr.docChanged || tr.selection) return blockDecorationField(tr.state)
+    return prev
+  },
+  provide: (f) => EditorView.decorations.from(f)
+})
+
+// ---- Plugin ----------------------------------------------------------------
+
+export function livePreviewPlugin(_docDir?: string): Extension {
   return Prec.lowest([
-    ViewPlugin.fromClass(LivePreviewPlugin, {
-      decorations: (v) => v.decorations,
-      provide: (plugin) =>
-        EditorView.atomicRanges.of((view) => view.plugin(plugin)?.decorations ?? Decoration.none)
-    })
+    blockDecorations,
+    ViewPlugin.fromClass(
+      class {
+        decorations: DecorationSet
+        constructor(view: EditorView) {
+          this.decorations = buildDecorations(view)
+        }
+        update(update: ViewUpdate): void {
+          if (update.docChanged || update.selectionSet || update.focusChanged || update.viewportChanged) {
+            this.decorations = buildDecorations(update.view)
+          }
+        }
+      },
+      {
+        decorations: (v) => v.decorations
+      }
+    )
   ])
+}
+
+export function setLivePreviewTheme(_theme: 'light' | 'dark'): void {
+  // Theme switching handled by CSS variables; no JS action needed.
 }
