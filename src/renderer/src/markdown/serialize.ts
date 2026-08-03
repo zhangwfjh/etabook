@@ -7,19 +7,24 @@
  * `<h1>`, `<p>`, `<pre><code>`, `<table>`, KaTeX math, etc.
  */
 
-import { parser, GFM } from '@lezer/markdown'
+import { parser, GFM, Subscript, Superscript, Emoji } from '@lezer/markdown'
 import type { SyntaxNode } from '@lezer/common'
 import { mathExtension } from './math'
 import { renderMath, extractTex } from './katex'
+import { resolveEmoji } from './emoji'
 import { highlightCodeToHtml, resolveCodeParser, codeHighlightCss } from './highlight'
 
-const markdownParser = parser.configure([GFM, mathExtension])
+// MUST match the editor's parser (markdownLanguage = GFM + Subscript +
+// Superscript + Emoji, plus the math extension) so Live == Reading == Export.
+const markdownParser = parser.configure([GFM, Subscript, Superscript, Emoji, mathExtension])
 
 // Mark / delimiter nodes that are structural only — produce no HTML.
+// `URL` is intentionally NOT skipped — bare/angle autolinks render via the
+// `URL` case below (a Link's destination URL is suppressed there by parent check).
 const SKIP_NODES = new Set([
   'HeaderMark', 'EmphasisMark', 'CodeMark', 'CodeInfo', 'LinkMark',
   'LinkTitle', 'StrikethroughMark', 'QuoteMark', 'ListMark',
-  'TaskMarker', 'TableDelimiter', 'URL'
+  'TaskMarker', 'TableDelimiter', 'SubscriptMark', 'SuperscriptMark'
 ])
 
 function esc(s: string): string {
@@ -62,6 +67,29 @@ function renderInlineNode(node: SyntaxNode, src: string): string {
       return `<code>${esc(src.slice(node.from + 1, node.to - 1))}</code>`
     case 'Strikethrough':
       return `<del>${renderInline(node, src)}</del>`
+    case 'Subscript':
+      return `<sub>${renderInline(node, src)}</sub>`
+    case 'Superscript':
+      return `<sup>${renderInline(node, src)}</sup>`
+    case 'Emoji': {
+      // Node spans `:name:`; strip the colons and resolve the shortcode.
+      const name = src.slice(node.from + 1, node.to - 1)
+      return esc(resolveEmoji(name))
+    }
+    case 'HardBreak':
+      return '<br>'
+    case 'HTMLTag':
+      // Inline raw HTML — GFM/CommonMark pass it through verbatim.
+      return src.slice(node.from, node.to)
+    case 'URL': {
+      // Bare/angle autolinks. Inside a Link this is the destination, already
+      // emitted on the <a href>, so suppress it here to avoid duplication.
+      if (node.parent?.name === 'Link') return ''
+      const raw = src.slice(node.from, node.to)
+      const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw)
+      const href = hasScheme ? raw : `mailto:${raw}`
+      return `<a href="${escAttr(href)}">${esc(raw)}</a>`
+    }
     case 'Link': {
       const urlNode = child(node, 'URL')
       const url = urlNode ? escAttr(src.slice(urlNode.from, urlNode.to)) : ''
@@ -177,15 +205,23 @@ export async function serializeToHtml(src: string): Promise<string> {
         parts.push(`<blockquote>${renderBlocks(node, src).trim()}</blockquote>`)
         break
       case 'FencedCode':
-      case 'IndentedCode': {
-        const codeNode = child(node, 'CodeText')
-        const code = codeNode ? src.slice(codeNode.from, codeNode.to) : ''
+      case 'CodeBlock': { // indented code is the `CodeBlock` node (NOT `IndentedCode`)
+        // A CodeBlock holds one CodeText child per source line; concatenate all.
+        let code = ''
+        for (let c = node.firstChild; c; c = c.nextSibling) {
+          if (c.name === 'CodeText') code += src.slice(c.from, c.to)
+        }
         const infoNode = child(node, 'CodeInfo')
         const lang = infoNode ? src.slice(infoNode.from, infoNode.to).trim() : ''
         const codeParser = await resolveCodeParser(lang)
         parts.push(highlightCodeToHtml(code, codeParser))
         break
       }
+      case 'HTMLBlock':
+      case 'CommentBlock':
+        // Raw HTML — GFM/CommonMark pass it through verbatim.
+        parts.push(src.slice(node.from, node.to))
+        break
       case 'HorizontalRule':
         parts.push('<hr>')
         break

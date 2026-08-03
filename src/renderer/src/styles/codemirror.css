@@ -180,6 +180,11 @@
   text-decoration: underline !important;
   text-underline-offset: 2px;
 }
+.lp-sub { vertical-align: sub; font-size: 0.75em; }
+.lp-sup { vertical-align: super; font-size: 0.75em; }
+.lp-emoji { font-size: 1.15em; }
+.editor-reading .lp-html-inline,
+.editor-reading .lp-html-block { }
 
 /* List markers */
 .lp-list-marker {
@@ -212,7 +217,7 @@
 .editor-live .lp-math-inline .katex { font-size: 1.05em; }
 .editor-live .lp-math-block { padding: 0.8em 0; text-align: center; overflow-x: auto; }
 .editor-live .lp-math-block .katex-display { margin: 0; }
-.editor-live .lp-footnote-ref { font-size: 0.75em; vertical-align: super; color: var(--accent); opacity: 0.8; }
+/* (footnote CSS removed — no footnote parser extension existed) */
 
 /* Tables — block widget. Same margin→padding reasoning as HR. */
 .lp-table-wrap { padding: 1em 0; }

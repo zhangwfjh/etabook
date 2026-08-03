@@ -115,9 +115,9 @@
   margin: 1em 0;
 }
 
-/* Footnotes */
-.prose .footnote { font-size: 0.85em; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 0.5em; margin-top: 2em; }
-
+/* Subscript / superscript / emoji / raw HTML (rendered by export serializer) */
+.prose sub { vertical-align: sub; font-size: 0.75em; }
+.prose sup { vertical-align: super; font-size: 0.75em; }
 /* KaTeX */
 .prose .math-inline { font-size: 1.05em; }
 .prose .math-display {

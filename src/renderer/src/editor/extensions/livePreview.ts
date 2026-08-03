@@ -10,6 +10,7 @@ import { Prec, StateField, Facet, type Extension, type EditorState, type Range }
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
 import { renderMath, extractTex } from '../../markdown/katex'
+import { resolveEmoji } from '../../markdown/emoji'
 
 /**
  * When true, the decoration engine treats ALL lines as inactive — markup is
@@ -49,7 +50,8 @@ const LINE_CLASS_BY_BLOCK: Record<string, string> = {
   SetextHeading1: 'lp-h1-line',
   SetextHeading2: 'lp-h2-line',
   Blockquote: 'lp-quote-line',
-  FencedCode: 'lp-code-line'
+  FencedCode: 'lp-code-line',
+  CodeBlock: 'lp-code-line'
 }
 
 // Syntax tokens to HIDE on inactive (non-cursor) lines.
@@ -61,7 +63,9 @@ const HIDEABLE_SYNTAX = new Set([
   'LinkMark',
   'LinkTitle',
   'StrikethroughMark',
-  'QuoteMark'
+  'QuoteMark',
+  'SubscriptMark',
+  'SuperscriptMark'
 ])
 
 // Inline content marks applied UNCONDITIONALLY (always styled).
@@ -70,6 +74,8 @@ const INLINE_MARK_CLASS: Record<string, string> = {
   Emphasis: 'lp-em',
   InlineCode: 'lp-inline-code',
   Strikethrough: 'lp-strike',
+  Subscript: 'lp-sub',
+  Superscript: 'lp-sup',
   Link: 'lp-link',
   URL: 'lp-url'
 }
@@ -153,6 +159,70 @@ class BlockMathWidget extends WidgetType {
   }
   override ignoreEvent(): boolean { return false }
 }
+
+class EmojiWidget extends WidgetType {
+  constructor(readonly glyph: string) { super() }
+  override eq(o: EmojiWidget): boolean { return o.glyph === this.glyph }
+  override toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'lp-emoji'
+    span.textContent = this.glyph
+    return span
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+// Inline raw HTML (e.g. <b>, <span>) — rendered verbatim on inactive lines.
+class InlineHtmlWidget extends WidgetType {
+  constructor(readonly html: string) { super() }
+  override eq(o: InlineHtmlWidget): boolean { return o.html === this.html }
+  override toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'lp-html-inline'
+    span.innerHTML = this.html
+    return span
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+// Hard line break — renders a <br> on inactive lines.
+class HardBreakWidget extends WidgetType {
+  override eq(): boolean { return true }
+  override toDOM(): HTMLElement {
+    const br = document.createElement('br')
+    return br
+  }
+  override ignoreEvent(): boolean { return true }
+}
+const HARD_BREAK = new HardBreakWidget()
+
+// Raw HTML block — renders the user's HTML verbatim (reading mode / inactive
+// lines). Scripts inserted via innerHTML never execute (HTML spec), so this is
+// safe for the user's own local content.
+class RawHtmlBlockWidget extends WidgetType {
+  constructor(readonly html: string) { super() }
+  override eq(o: RawHtmlBlockWidget): boolean { return o.html === this.html }
+  override toDOM(): HTMLElement {
+    const div = document.createElement('div')
+    div.className = 'lp-html-block'
+    div.innerHTML = this.html
+    return div
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+// Empty block widget used to hide HTML comment blocks (DOM strips comments,
+// so we render nothing).
+class BlankBlockWidget extends WidgetType {
+  override eq(): boolean { return true }
+  override toDOM(): HTMLElement {
+    const div = document.createElement('div')
+    div.style.display = 'none'
+    return div
+  }
+  override ignoreEvent(): boolean { return true }
+}
+const BLANK_BLOCK = new BlankBlockWidget()
 
 // ---- Decoration builder ----------------------------------------------------
 
@@ -341,6 +411,32 @@ function buildDecorations(view: EditorView): DecorationSet {
           })
         }
       }
+      // Emoji shortcode: replace `:name:` with the resolved glyph on inactive lines.
+      if (name === 'Emoji' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          const emojiName = doc.sliceString(from + 1, to - 1)
+          pushReplace(ranges, doc, from, to, {
+            widget: new EmojiWidget(resolveEmoji(emojiName))
+          })
+        }
+      }
+      // Inline raw HTML (e.g. <b>): render verbatim on inactive lines.
+      if (name === 'HTMLTag' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          pushReplace(ranges, doc, from, to, {
+            widget: new InlineHtmlWidget(doc.sliceString(from, to))
+          })
+        }
+      }
+      // Hard line break (two trailing spaces or backslash before newline).
+      if (name === 'HardBreak' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          pushReplace(ranges, doc, from, to, { widget: HARD_BREAK })
+        }
+      }
       // HR handled by block StateField (below) since it's a block widget.
     }
   })
@@ -523,6 +619,27 @@ function blockDecorationField(state: EditorState): DecorationSet {
           ranges.push(
             Decoration.replace({ block: true, widget: new BlockMathWidget(extractTex(raw)) }).range(node.from, replaceTo)
           )
+        }
+      }
+      // Raw HTML block / HTML comment.
+      if ((node.name === 'HTMLBlock' || node.name === 'CommentBlock') && node.from < node.to) {
+        const firstLineNum = doc.lineAt(node.from).number
+        const lastLineNum = doc.lineAt(node.to).number
+        let anyActive = false
+        for (let n = firstLineNum; n <= lastLineNum; n++) {
+          if (activeLines.has(n)) { anyActive = true; break }
+        }
+        if (!anyActive) {
+          const replaceTo = doc.lineAt(node.to).to
+          if (node.name === 'HTMLBlock') {
+            const raw = doc.sliceString(node.from, node.to)
+            ranges.push(
+              Decoration.replace({ block: true, widget: new RawHtmlBlockWidget(raw) }).range(node.from, replaceTo)
+            )
+          } else {
+            // CommentBlock: hide it entirely (DOM strips comments).
+            ranges.push(Decoration.replace({ block: true, widget: BLANK_BLOCK }).range(node.from, replaceTo))
+          }
         }
       }
     }
