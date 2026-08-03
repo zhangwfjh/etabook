@@ -38,10 +38,12 @@ function chromeTheme(dark: boolean): Extension {
   )
 }
 
-/** Token-color highlighting for the raw markdown source (Source mode + raw markup). */
+/** Token-color highlighting for raw markdown source + nested code blocks.
+ * Combines markdown markup tags (headings, emphasis, links) with code-syntax
+ * tags (keyword, string, number) so fenced code blocks get colored by the
+ * same HighlightStyle — no separate fallback needed. */
 const sourceHighlight = HighlightStyle.define([
-  // Heading typography (size/weight/font) is controlled by line-level CSS
-  // (lp-hN-line) so it matches Reading mode exactly. Highlight only sets color.
+  // Markdown markup
   { tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6], color: 'var(--text)' },
   { tag: t.strong, fontWeight: '700' },
   { tag: t.emphasis, fontStyle: 'italic' },
@@ -52,7 +54,19 @@ const sourceHighlight = HighlightStyle.define([
   { tag: t.quote, color: 'var(--text-muted)', fontStyle: 'italic' },
   { tag: t.list, color: 'var(--text)' },
   { tag: t.processingInstruction, color: 'var(--text-muted)' },
-  { tag: t.meta, color: 'var(--text-muted)' }
+  { tag: t.meta, color: 'var(--text-muted)' },
+  // Code syntax (nested fenced blocks + inline code)
+  { tag: t.keyword, color: 'var(--hl-keyword)' },
+  { tag: [t.name, t.deleted, t.character, t.macroName], color: 'var(--hl-variable)' },
+  { tag: [t.function(t.variableName), t.labelName], color: 'var(--hl-function)' },
+  { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: 'var(--hl-atom)' },
+  { tag: [t.typeName, t.className, t.number, t.changed], color: 'var(--hl-type)' },
+  { tag: [t.string, t.special(t.string)], color: 'var(--hl-string)' },
+  { tag: t.regexp, color: 'var(--hl-regexp)' },
+  { tag: t.atom, color: 'var(--hl-atom)' },
+  { tag: t.comment, color: 'var(--hl-comment)', fontStyle: 'italic' },
+  { tag: t.propertyName, color: 'var(--hl-property)' },
+  { tag: t.unit, color: 'var(--hl-number)' }
 ])
 
 /** Compartment-based theme so toggling dark mode reconfigures without remount. */

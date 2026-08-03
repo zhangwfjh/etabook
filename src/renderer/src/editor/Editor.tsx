@@ -21,6 +21,8 @@ export type EditorProps = {
   showLineNumbers: boolean
   readonly: boolean
   livePreview: boolean
+  /** Reading mode: fully rendered, read-only, no source visible anywhere. */
+  reading: boolean
   docDir?: string
   onChange: (text: string) => void
 }
@@ -56,7 +58,7 @@ export function Editor(props: EditorProps): React.JSX.Element {
           readonly: props.readonly
         }),
         themeCompartment.of(editorTheme(props.dark)),
-        liveCompartment.of(props.livePreview ? livePreviewPlugin(props.docDir) : []),
+        liveCompartment.of(props.livePreview ? livePreviewPlugin({ docDir: props.docDir, reading: props.reading }) : []),
         slashCommands(),
         onChangeExt
       ]
@@ -115,16 +117,25 @@ export function Editor(props: EditorProps): React.JSX.Element {
     })
   }, [props.readonly])
 
-  // Reconfigure live preview / docDir.
+  // Reconfigure live preview / docDir / reading.
   useEffect(() => {
     const view = viewRef.current as AugmentedView | null
     if (!view?._liveCompartment) return
     view.dispatch({
       effects: view._liveCompartment.reconfigure(
-        props.livePreview ? livePreviewPlugin(props.docDir) : ([] as Extension[])
+        props.livePreview
+          ? livePreviewPlugin({ docDir: props.docDir, reading: props.reading })
+          : ([] as Extension[])
       )
     })
-  }, [props.livePreview, props.docDir])
+  }, [props.livePreview, props.docDir, props.reading])
 
-  return <div ref={hostRef} className={`h-full w-full overflow-hidden ${props.livePreview ? 'editor-live' : 'editor-source'}`} />
+  return (
+    <div
+      ref={hostRef}
+      className={`h-full w-full overflow-hidden ${
+        props.reading ? 'editor-reading editor-live' : props.livePreview ? 'editor-live' : 'editor-source'
+      }`}
+    />
+  )
 }

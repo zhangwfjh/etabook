@@ -6,8 +6,20 @@ import {
   WidgetType,
   EditorView,
 } from '@codemirror/view'
-import { Prec, StateField, type Extension, type EditorState, type Range } from '@codemirror/state'
+import { Prec, StateField, Facet, type Extension, type EditorState, type Range } from '@codemirror/state'
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
+import type { SyntaxNode } from '@lezer/common'
+import { renderMath, extractTex } from '../../markdown/katex'
+
+/**
+ * When true, the decoration engine treats ALL lines as inactive — markup is
+ * always hidden and widgets always shown. This is "reading mode": the same
+ * live-preview surface, fully rendered, with no source ever revealed.
+ * Driven by a Facet so both the ViewPlugin and the StateField consult it.
+ */
+export const readingModeFacet = Facet.define<boolean, boolean>({
+  combine: (values) => values.some((v) => v)
+})
 
 /**
  * Live Preview — inline decoration engine.
@@ -118,6 +130,30 @@ class HrWidget extends WidgetType {
   }
 }
 
+class InlineMathWidget extends WidgetType {
+  constructor(readonly tex: string) { super() }
+  override eq(o: InlineMathWidget): boolean { return o.tex === this.tex }
+  override toDOM(): HTMLElement {
+    const span = document.createElement('span')
+    span.className = 'lp-math-inline math-inline'
+    span.innerHTML = renderMath(this.tex, false)
+    return span
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+class BlockMathWidget extends WidgetType {
+  constructor(readonly tex: string) { super() }
+  override eq(o: BlockMathWidget): boolean { return o.tex === this.tex }
+  override toDOM(): HTMLElement {
+    const div = document.createElement('div')
+    div.className = 'lp-math-block math-display'
+    div.innerHTML = renderMath(this.tex, true)
+    return div
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
 // ---- Decoration builder ----------------------------------------------------
 
 function cursorOnLine(state: EditorState, from: number, to: number): boolean {
@@ -136,7 +172,8 @@ function buildDecorations(view: EditorView): DecorationSet {
   const listItemDepths = new Map<number, number>()
   // Collect active (cursor) line numbers.
   const activeLines = new Set<number>()
-  if (view.hasFocus) {
+  // In reading mode, treat ALL lines as inactive (markup always hidden).
+  if (!state.facet(readingModeFacet) && view.hasFocus) {
     for (const r of state.selection.ranges) {
       const first = doc.lineAt(r.from).number
       const last = doc.lineAt(r.to).number
@@ -207,6 +244,14 @@ function buildDecorations(view: EditorView): DecorationSet {
       const markClass = INLINE_MARK_CLASS[name]
       if (markClass) {
         ranges.push(Decoration.mark({ class: markClass }).range(from, to))
+      }
+
+      // Footnote reference: Link nodes whose text starts with [^ get a chip class.
+      if (name === 'Link' && from < to) {
+        const text = doc.sliceString(from, to)
+        if (/^\^\[/.test(text.slice(1))) {
+          ranges.push(Decoration.mark({ class: 'lp-footnote-ref' }).range(from, to))
+        }
       }
 
       // --- 3. Hide decorations (inactive lines only) ---
@@ -285,6 +330,16 @@ function buildDecorations(view: EditorView): DecorationSet {
       // Image: hide source syntax on inactive lines (block widget renders below).
       if (name === 'Image' && from < to && !cursorOnLine(state, from, to)) {
         pushReplace(ranges, doc, from, to)
+      }
+
+      // Inline math: replace $...$ with rendered KaTeX on inactive lines.
+      if (name === 'InlineMath' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          pushReplace(ranges, doc, from, to, {
+            widget: new InlineMathWidget(extractTex(doc.sliceString(from, to)))
+          })
+        }
       }
       // HR handled by block StateField (below) since it's a block widget.
     }
@@ -405,10 +460,12 @@ function blockDecorationField(state: EditorState): DecorationSet {
   const doc = state.doc
   const ranges: Range<Decoration>[] = []
   const activeLines = new Set<number>()
-  for (const r of state.selection.ranges) {
-    const first = doc.lineAt(r.from).number
-    const last = doc.lineAt(r.to).number
-    for (let n = first; n <= last; n++) activeLines.add(n)
+  if (!state.facet(readingModeFacet)) {
+    for (const r of state.selection.ranges) {
+      const first = doc.lineAt(r.from).number
+      const last = doc.lineAt(r.to).number
+      for (let n = first; n <= last; n++) activeLines.add(n)
+    }
   }
   const tree = ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state)
   tree.iterate({
@@ -453,6 +510,21 @@ function blockDecorationField(state: EditorState): DecorationSet {
           ranges.push(Decoration.widget({ block: true, widget: new ImageBlockWidget(src, alt), side: 1 }).range(lineEnd))
         }
       }
+      if (node.name === 'BlockMath' && node.from < node.to) {
+        const firstLineNum = doc.lineAt(node.from).number
+        const lastLineNum = doc.lineAt(node.to).number
+        let anyActive = false
+        for (let n = firstLineNum; n <= lastLineNum; n++) {
+          if (activeLines.has(n)) { anyActive = true; break }
+        }
+        if (!anyActive) {
+          const raw = doc.sliceString(node.from, node.to)
+          const replaceTo = doc.lineAt(node.to).to
+          ranges.push(
+            Decoration.replace({ block: true, widget: new BlockMathWidget(extractTex(raw)) }).range(node.from, replaceTo)
+          )
+        }
+      }
     }
   })
   return Decoration.set(ranges, true)
@@ -469,8 +541,45 @@ const blockDecorations = StateField.define<DecorationSet>({
 
 // ---- Plugin ----------------------------------------------------------------
 
-export function livePreviewPlugin(_docDir?: string): Extension {
+/** Extract the URL string from a Link syntax node at the given position. */
+function linkUrlAt(state: EditorState, pos: number): string | null {
+  const tree = ensureSyntaxTree(state, state.doc.length, 200) ?? syntaxTree(state)
+  let node: SyntaxNode | null = tree.resolve(pos, 1)
+  // Walk up to find a Link or URL node.
+  while (node && node.name !== 'Link' && node.name !== 'URL') node = node.parent
+  if (!node) return null
+  if (node.name === 'URL') return state.doc.sliceString(node.from, node.to)
+  // Link node — find the URL child.
+  for (let c = node.firstChild; c; c = c.nextSibling) {
+    if (c.name === 'URL') return state.doc.sliceString(c.from, c.to)
+  }
+  return null
+}
+
+/** Click handler: in reading mode, clicking a link opens it externally. */
+function readingClickHandler(): Extension {
+  return EditorView.domEventHandlers({
+    click(event, view) {
+      if (!view.state.facet(readingModeFacet)) return false
+      const target = event.target as HTMLElement | null
+      const linkEl = target?.closest('.lp-link, .lp-url')
+      if (!linkEl) return false
+      const pos = view.posAtDOM(linkEl)
+      const url = linkUrlAt(view.state, pos)
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer')
+        return true
+      }
+      return false
+    }
+  })
+}
+
+export function livePreviewPlugin(opts: { docDir?: string; reading?: boolean } = {}): Extension {
+  const reading = opts.reading ?? false
   return Prec.lowest([
+    readingModeFacet.of(reading),
+    reading ? readingClickHandler() : [],
     blockDecorations,
     ViewPlugin.fromClass(
       class {

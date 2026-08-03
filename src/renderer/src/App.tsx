@@ -19,7 +19,7 @@ import { StatusBar } from '@renderer/components/StatusBar'
 import { Button, Tooltip } from '@renderer/components/ui'
 import { FileTree } from '@renderer/features/fileTree/FileTree'
 import { Outline } from '@renderer/features/outline/Outline'
-import { EditorPane, ReadingPane } from '@renderer/modes/Views'
+import { EditorPane } from '@renderer/modes/Views'
 import { CommandPalette } from '@renderer/features/commandPalette/CommandPalette'
 import { buildCommands } from '@renderer/features/commandPalette/commands'
 import { SettingsModal } from '@renderer/features/settings/SettingsModal'
@@ -253,9 +253,7 @@ export function App(): ReactElement {
         <main className="flex flex-col flex-1 min-w-0">
           {state.mode !== 'reading' && <Toolbar />}
           <div className="flex-1 min-h-0 overflow-hidden bg-[var(--bg)]">
-            {activeDoc && state.mode === 'reading' ? (
-              <ReadingPane doc={activeDoc} />
-            ) : activeDoc ? (
+            {activeDoc ? (
               <EditorPaneBridge
                 doc={activeDoc}
                 mode={state.mode}
@@ -320,7 +318,8 @@ function EditorPaneBridge({
   return (
     <EditorPane
       doc={doc}
-      livePreview={mode === 'live'}
+      livePreview={mode === 'live' || mode === 'reading'}
+      reading={mode === 'reading'}
       onChange={onChange}
       onCursorChange={onCursorChange}
       onView={onReady}

@@ -8,6 +8,12 @@ import { buildAppMenu } from './menu'
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
+// Dev-only: expose a CDP endpoint so the test harness can drive the renderer
+// over Chromium DevTools Protocol (see test/runner.ts). No-op in packaged builds.
+if (isDev) {
+  app.commandLine.appendSwitch('remote-debugging-port', '9223')
+  app.commandLine.appendSwitch('remote-allow-origins', '*')
+}
 
 let mainWindow: BrowserWindow | null = null
 

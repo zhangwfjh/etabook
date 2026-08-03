@@ -32,6 +32,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { EditorState } from '@codemirror/state'
 import { markdownKeymapExtension } from './markdownKeymap'
+import { mathExtension } from '../../markdown/math'
 
 /** Compartments for options that change at runtime. */
 export const wrapCompartment = new Compartment()
@@ -67,7 +68,10 @@ export function coreExtensions(opts: {
     markdown({
       base: markdownLanguage,
       codeLanguages: languages,
-      addKeymap: true
+      addKeymap: true,
+      // First-class $...$ / $$...$$ math nodes, consumed by the live-preview
+      // decorations and the export serializer (single-renderer unification).
+      extensions: [mathExtension]
     }),
     keymap.of([
       ...closeBracketsKeymap,

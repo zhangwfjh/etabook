@@ -19,6 +19,3 @@ declare module '@fontsource/*'
 // KaTeX stylesheet.
 declare module 'katex/dist/katex.min.css'
 
-// markdown-it plugins without bundled types.
-declare module 'markdown-it-footnote'
-declare module 'markdown-it-task-lists'

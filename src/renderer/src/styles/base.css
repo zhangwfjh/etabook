@@ -13,6 +13,18 @@
   --accent-contrast: #FFFFFF;
   --danger: #B4341F;
   --accent-soft: rgba(15, 110, 100, 0.10);
+  /* Code-syntax tokens (shared by on-screen editor + export serializer) */
+  --hl-keyword: #9333EA;
+  --hl-string: #059669;
+  --hl-number: #C2410C;
+  --hl-comment: #94A3B8;
+  --hl-function: #2563EB;
+  --hl-type: #7C3AED;
+  --hl-variable: #1F1D1A;
+  --hl-property: #2563EB;
+  --hl-regexp: #C2410C;
+  --hl-atom: #9333EA;
+  --hl-punctuation: #6B665C;
   --shadow-sm: 0 1px 2px rgba(31, 29, 26, 0.06);
   --shadow-md: 0 4px 16px rgba(31, 29, 26, 0.10);
   --radius: 8px;
@@ -32,6 +44,17 @@
   --accent-contrast: #0C1413;
   --danger: #FF6B5B;
   --accent-soft: rgba(61, 217, 198, 0.12);
+  --hl-keyword: #C792EA;
+  --hl-string: #C3E88D;
+  --hl-number: #F78C6C;
+  --hl-comment: #6A7A82;
+  --hl-function: #82AAFF;
+  --hl-type: #FFCB6B;
+  --hl-variable: #EEFFFF;
+  --hl-property: #82AAFF;
+  --hl-regexp: #F07178;
+  --hl-atom: #C792EA;
+  --hl-punctuation: #89DDFF;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.30);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.40);
   color-scheme: dark;
