@@ -58,7 +58,7 @@ export function Editor(props: EditorProps): React.JSX.Element {
           readonly: props.readonly
         }),
         themeCompartment.of(editorTheme(props.dark)),
-        liveCompartment.of(props.livePreview ? livePreviewPlugin({ docDir: props.docDir, reading: props.reading }) : []),
+        liveCompartment.of(props.livePreview ? livePreviewPlugin({ docDir: props.docDir, dark: props.dark, reading: props.reading }) : []),
         slashCommands(),
         onChangeExt
       ]
@@ -124,11 +124,11 @@ export function Editor(props: EditorProps): React.JSX.Element {
     view.dispatch({
       effects: view._liveCompartment.reconfigure(
         props.livePreview
-          ? livePreviewPlugin({ docDir: props.docDir, reading: props.reading })
+          ? livePreviewPlugin({ docDir: props.docDir, dark: props.dark, reading: props.reading })
           : ([] as Extension[])
       )
     })
-  }, [props.livePreview, props.docDir, props.reading])
+  }, [props.livePreview, props.docDir, props.reading, props.dark])
 
   return (
     <div

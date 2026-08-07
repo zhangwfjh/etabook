@@ -11,6 +11,8 @@ import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
 import { renderMath, extractTex } from '../../markdown/katex'
 import { resolveEmoji } from '../../markdown/emoji'
+import { renderMermaid } from '../../markdown/mermaid'
+import { calloutMeta } from '../../markdown/callout'
 
 /**
  * When true, the decoration engine treats ALL lines as inactive — markup is
@@ -21,6 +23,12 @@ import { resolveEmoji } from '../../markdown/emoji'
 export const readingModeFacet = Facet.define<boolean, boolean>({
   combine: (values) => values.some((v) => v)
 })
+/** Context threaded into both decoration builders. */
+interface LpCtx {
+  docDir?: string
+  dark: boolean
+}
+
 
 /**
  * Live Preview — inline decoration engine.
@@ -51,7 +59,9 @@ const LINE_CLASS_BY_BLOCK: Record<string, string> = {
   SetextHeading2: 'lp-h2-line',
   Blockquote: 'lp-quote-line',
   FencedCode: 'lp-code-line',
-  CodeBlock: 'lp-code-line'
+  CodeBlock: 'lp-code-line',
+  Frontmatter: 'lp-frontmatter-line',
+  FootnoteDef: 'lp-fndef-line'
 }
 
 // Syntax tokens to HIDE on inactive (non-cursor) lines.
@@ -74,10 +84,13 @@ const INLINE_MARK_CLASS: Record<string, string> = {
   Emphasis: 'lp-em',
   InlineCode: 'lp-inline-code',
   Strikethrough: 'lp-strike',
-  Subscript: 'lp-sub',
-  Superscript: 'lp-sup',
   Link: 'lp-link',
-  URL: 'lp-url'
+  URL: 'lp-url',
+  Highlight: 'lp-highlight',
+  Tag: 'lp-tag',
+  WikiLink: 'lp-wikilink',
+  Embed: 'lp-embed',
+  FootnoteRef: 'lp-footnote-ref'
 }
 
 // ---- Widgets ---------------------------------------------------------------
@@ -224,6 +237,127 @@ class BlankBlockWidget extends WidgetType {
 }
 const BLANK_BLOCK = new BlankBlockWidget()
 
+// ---- Obsidian widgets ------------------------------------------------------
+
+/** Resolve a wiki/embed target + alias from a `[[…]]` inner string. */
+function parseWikiInner(inner: string): { target: string; display: string } {
+  const pipe = inner.indexOf('|')
+  let target: string, alias: string | undefined
+  if (pipe >= 0) { target = inner.slice(0, pipe); alias = inner.slice(pipe + 1) }
+  else target = inner
+  let display = alias ?? target
+  if (!alias) {
+    const h = target.indexOf('#')
+    if (h === 0) display = target.slice(1) || target
+    else if (h > 0) display = target.slice(0, h)
+  }
+  return { target, display }
+}
+
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|bmp|avif)$/i
+
+/** Build a relative URL for an embed target using the doc's directory. */
+function resolveEmbedSrc(target: string, docDir?: string): string {
+  if (/^https?:|^data:|^file:|^\//.test(target)) return target
+  return docDir ? `${docDir}/${target}` : target
+}
+
+class TagWidget extends WidgetType {
+  constructor(readonly label: string) { super() }
+  override eq(o: TagWidget): boolean { return o.label === this.label }
+  override toDOM(): HTMLElement {
+    const a = document.createElement('a')
+    a.className = 'lp-tag-chip'
+    a.textContent = this.label
+    return a
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+class WikiLinkWidget extends WidgetType {
+  constructor(readonly target: string, readonly display: string) { super() }
+  override eq(o: WikiLinkWidget): boolean { return o.target === this.target && o.display === this.display }
+  override toDOM(): HTMLElement {
+    const a = document.createElement('a')
+    a.className = 'lp-wikilink-chip'
+    a.setAttribute('data-target', this.target)
+    a.textContent = this.display
+    return a
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+class EmbedImageWidget extends WidgetType {
+  constructor(readonly src: string, readonly alt: string) { super() }
+  override eq(o: EmbedImageWidget): boolean { return o.src === this.src }
+  override toDOM(): HTMLElement {
+    const img = document.createElement('img')
+    img.className = 'lp-embed-img'
+    img.src = this.src
+    img.alt = this.alt
+    return img
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+class EmbedRefWidget extends WidgetType {
+  constructor(readonly target: string) { super() }
+  override eq(o: EmbedRefWidget): boolean { return o.target === this.target }
+  override toDOM(): HTMLElement {
+    const a = document.createElement('a')
+    a.className = 'lp-embed-ref'
+    a.setAttribute('data-target', this.target)
+    a.textContent = '📄 ' + this.target
+    return a
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+/** Mermaid block widget. Renders asynchronously: starts as a placeholder,
+ *  swaps in the SVG when mermaid resolves, then re-equates on theme changes. */
+class MermaidWidget extends WidgetType {
+  constructor(readonly code: string, readonly dark: boolean) { super() }
+  override eq(o: MermaidWidget): boolean {
+    // Re-render when the theme flips; otherwise key on code+theme.
+    return o.code === this.code && o.dark === this.dark
+  }
+  override toDOM(): HTMLElement {
+    const div = document.createElement('div')
+    div.className = 'lp-mermaid'
+    div.textContent = 'Loading diagram…'
+    renderMermaid(this.code, this.dark)
+      .then((svg) => { div.innerHTML = svg })
+      .catch(() => { div.textContent = 'Invalid diagram' })
+    return div
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+const CALLOUT_HEAD_RE = /^>\s*\[!([\w-]+)\]\s*(.*)$/
+
+/** Callout header bar — replaces the `> [!type] title` first line with an
+ *  icon + title. Rendered as an inline widget so the raw source reappears
+ *  when the cursor enters the line (standard live-preview behavior). */
+class CalloutHeaderWidget extends WidgetType {
+  constructor(readonly type: string, readonly title: string) { super() }
+  override eq(o: CalloutHeaderWidget): boolean {
+    return o.type === this.type && o.title === this.title
+  }
+  override toDOM(): HTMLElement {
+    const meta = calloutMeta(this.type)
+    const span = document.createElement('span')
+    span.className = 'lp-callout-header'
+    span.innerHTML = meta.icon
+    const label = document.createElement('span')
+    label.className = 'lp-callout-header-text'
+    label.textContent = this.title || meta.defaultTitle
+    span.appendChild(label)
+    return span
+  }
+  override ignoreEvent(): boolean { return false }
+}
+
+
 // ---- Decoration builder ----------------------------------------------------
 
 function cursorOnLine(state: EditorState, from: number, to: number): boolean {
@@ -235,11 +369,14 @@ function cursorOnLine(state: EditorState, from: number, to: number): boolean {
   return false
 }
 
-function buildDecorations(view: EditorView): DecorationSet {
+function buildDecorations(view: EditorView, ctx: LpCtx): DecorationSet {
   const { state } = view
   const { doc } = state
   const ranges: Range<Decoration>[] = []
   const listItemDepths = new Map<number, number>()
+  // Callout: lineNum → type (ALL lines); head info for first line only.
+  const calloutLineTypes = new Map<number, string>()
+  const calloutHeads = new Map<number, { type: string; title: string; from: number; to: number }>()
   // Collect active (cursor) line numbers.
   const activeLines = new Set<number>()
   // In reading mode, treat ALL lines as inactive (markup always hidden).
@@ -293,6 +430,37 @@ function buildDecorations(view: EditorView): DecorationSet {
         }
       }
 
+      // Callout detection: a blockquote whose first line matches `> [!type]`.
+      // Record head-line info for the post-iteration decoration pass.
+      if (name === 'Blockquote' && from < to) {
+        const firstLineEnd = doc.lineAt(from).to
+        const firstLineText = doc.sliceString(from, firstLineEnd)
+        const m = firstLineText.match(CALLOUT_HEAD_RE)
+        if (m) {
+          const typeLower = m[1].toLowerCase()
+          const headLine = doc.lineAt(from)
+          calloutHeads.set(headLine.number, {
+            type: typeLower,
+            title: m[2].trim(),
+            from: headLine.from,
+            to: headLine.to
+          })
+          const firstLineNum = headLine.number
+          const lastLineNum = doc.lineAt(to).number
+          // Tag every line with its callout type for line-class styling.
+          for (let n = firstLineNum; n <= lastLineNum; n++) calloutLineTypes.set(n, typeLower)
+          // Expand active lines across the whole callout so cursor entry
+          // anywhere reveals the raw source consistently.
+          let anyActive = false
+          for (let n = firstLineNum; n <= lastLineNum; n++) {
+            if (activeLines.has(n)) { anyActive = true; break }
+          }
+          if (anyActive) {
+            for (let n = firstLineNum; n <= lastLineNum; n++) activeLines.add(n)
+          }
+        }
+      }
+
       // Line classes — apply to every line of the block.
       // FencedCode gets first/last variants for border + rounded corners.
       const lineClass = LINE_CLASS_BY_BLOCK[name]
@@ -327,7 +495,10 @@ function buildDecorations(view: EditorView): DecorationSet {
       // --- 3. Hide decorations (inactive lines only) ---
       if (HIDEABLE_SYNTAX.has(name)) {
         const lineNum = doc.lineAt(from).number
-        if (!activeLines.has(lineNum)) {
+        // Callout head lines: the `>` is swallowed by the header widget
+        // (post-iteration), so skip the QuoteMark hide to avoid overlap.
+        const skipHide = name === 'QuoteMark' && calloutHeads.has(lineNum)
+        if (!skipHide && !activeLines.has(lineNum)) {
           let hideTo = to
           // HeaderMark / QuoteMark swallow trailing space so the hidden
           // state doesn't read indented.
@@ -437,20 +608,86 @@ function buildDecorations(view: EditorView): DecorationSet {
           pushReplace(ranges, doc, from, to, { widget: HARD_BREAK })
         }
       }
+      // --- 5. Obsidian inline nodes ---
+      // Highlight `==x==`: hide the `==` delimiters on inactive lines so the
+      // content reads as plain highlighted text (mark class does the styling).
+      if (name === 'Highlight' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          pushReplace(ranges, doc, from, from + 2)
+          pushReplace(ranges, doc, to - 2, to)
+        }
+      }
+      // Comment `%%x%%`: hide the whole node (content + delimiters) when inactive.
+      if (name === 'Comment' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          pushReplace(ranges, doc, from, to)
+        }
+      }
+      // Tag `#name`: replace with a chip on inactive lines.
+      if (name === 'Tag' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          pushReplace(ranges, doc, from, to, { widget: new TagWidget(doc.sliceString(from, to)) })
+        }
+      }
+      // WikiLink `[[…]]`: replace with a themed chip on inactive lines.
+      if (name === 'WikiLink' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          const { target, display } = parseWikiInner(doc.sliceString(from + 2, to - 2))
+          pushReplace(ranges, doc, from, to, { widget: new WikiLinkWidget(target, display) })
+        }
+      }
+      // Embed `![[target]]`: image → inline img; note → ref chip.
+      if (name === 'Embed' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          const target = doc.sliceString(from + 3, to - 2)
+          if (IMAGE_EXT_RE.test(target)) {
+            pushReplace(ranges, doc, from, to, {
+              widget: new EmbedImageWidget(resolveEmbedSrc(target, ctx.docDir), target)
+            })
+          } else {
+            pushReplace(ranges, doc, from, to, { widget: new EmbedRefWidget(target) })
+          }
+        }
+      }
+      // Footnote reference `[^id]`: keep the mark; on inactive lines also hide
+      // the brackets so it reads as a superscript-style ref.
+      if (name === 'FootnoteRef' && from < to) {
+        const lineNum = doc.lineAt(from).number
+        if (!activeLines.has(lineNum)) {
+          pushReplace(ranges, doc, from, from + 2)
+          pushReplace(ranges, doc, to - 1, to)
+        }
+      }
       // HR handled by block StateField (below) since it's a block widget.
     }
   })
-
-  // Blank lines are NOT collapsed — line-height collapse causes cursor overlay
-  // during the rebuild gap when the cursor enters (Obsidian doesn't collapse).
-  // Tables are rendered as block widgets by the StateField.
   const lineCount = doc.lines
+
   for (let n = 1; n <= lineCount; n++) {
     const line = doc.line(n)
     if (listItemDepths.has(n)) {
       const depth = listItemDepths.get(n)!
       const indent = 1.5 + (depth - 1) * 1.5
       ranges.push(Decoration.line({ class: 'lp-list-line', attributes: { style: `padding-left: ${indent}em` } }).range(line.from))
+    }
+    // Callout line classes + header widget.
+    const ctype = calloutLineTypes.get(n)
+    if (ctype) {
+      const isHead = calloutHeads.has(n)
+      const cls = `lp-callout-line ${isHead ? 'lp-callout-head' : 'lp-callout-body'} lp-callout-${ctype}`
+      // Remove the default quote-line class conflict by overriding here.
+      ranges.push(Decoration.line({ class: cls }).range(line.from))
+      if (isHead && !activeLines.has(n)) {
+        const head = calloutHeads.get(n)!
+        pushReplace(ranges, doc, head.from, head.to, {
+          widget: new CalloutHeaderWidget(head.type, head.title)
+        })
+      }
     }
   }
 
@@ -552,7 +789,7 @@ class ImageBlockWidget extends WidgetType {
   }
 }
 
-function blockDecorationField(state: EditorState): DecorationSet {
+function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
   const doc = state.doc
   const ranges: Range<Decoration>[] = []
   const activeLines = new Set<number>()
@@ -642,19 +879,45 @@ function blockDecorationField(state: EditorState): DecorationSet {
           }
         }
       }
+      // Mermaid fenced code block → rendered diagram widget (block).
+      if (node.name === 'FencedCode' && node.from < node.to) {
+        const info = node.node?.getChild('CodeInfo')
+        const lang = info ? doc.sliceString(info.from, info.to).trim().toLowerCase() : ''
+        if (lang === 'mermaid') {
+          const firstLineNum = doc.lineAt(node.from).number
+          const lastLineNum = doc.lineAt(node.to).number
+          let anyActive = false
+          for (let n = firstLineNum; n <= lastLineNum; n++) {
+            if (activeLines.has(n)) { anyActive = true; break }
+          }
+          if (!anyActive) {
+            let code = ''
+            const full = node.node
+            if (full) for (let c = full.firstChild; c; c = c.nextSibling) {
+              if (c.name === 'CodeText') code += doc.sliceString(c.from, c.to)
+            }
+            const replaceTo = doc.lineAt(node.to).to
+            ranges.push(
+              Decoration.replace({ block: true, widget: new MermaidWidget(code, ctx.dark) }).range(node.from, replaceTo)
+            )
+          }
+        }
+      }
     }
   })
   return Decoration.set(ranges, true)
 }
 
-const blockDecorations = StateField.define<DecorationSet>({
-  create(state) { return blockDecorationField(state) },
-  update(prev, tr) {
-    if (tr.docChanged || tr.selection) return blockDecorationField(tr.state)
-    return prev
-  },
-  provide: (f) => EditorView.decorations.from(f)
-})
+function blockDecorations(ctx: LpCtx) {
+  return StateField.define<DecorationSet>({
+    create(state) { return blockDecorationField(state, ctx) },
+    update(prev, tr) {
+      if (tr.docChanged || tr.selection) return blockDecorationField(tr.state, ctx)
+      return prev
+    },
+    provide: (f) => EditorView.decorations.from(f)
+  })
+}
 
 // ---- Plugin ----------------------------------------------------------------
 
@@ -691,22 +954,22 @@ function readingClickHandler(): Extension {
     }
   })
 }
-
-export function livePreviewPlugin(opts: { docDir?: string; reading?: boolean } = {}): Extension {
+export function livePreviewPlugin(opts: { docDir?: string; dark?: boolean; reading?: boolean } = {}): Extension {
   const reading = opts.reading ?? false
+  const ctx: LpCtx = { docDir: opts.docDir, dark: opts.dark ?? false }
   return Prec.lowest([
     readingModeFacet.of(reading),
     reading ? readingClickHandler() : [],
-    blockDecorations,
+    blockDecorations(ctx),
     ViewPlugin.fromClass(
       class {
         decorations: DecorationSet
         constructor(view: EditorView) {
-          this.decorations = buildDecorations(view)
+          this.decorations = buildDecorations(view, ctx)
         }
         update(update: ViewUpdate): void {
           if (update.docChanged || update.selectionSet || update.focusChanged || update.viewportChanged) {
-            this.decorations = buildDecorations(update.view)
+            this.decorations = buildDecorations(update.view, ctx)
           }
         }
       },

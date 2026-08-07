@@ -13,10 +13,13 @@ import { mathExtension } from './math'
 import { renderMath, extractTex } from './katex'
 import { resolveEmoji } from './emoji'
 import { highlightCodeToHtml, resolveCodeParser, codeHighlightCss } from './highlight'
+import { renderMermaid } from './mermaid'
+import { obsidianExtension } from './obsidian'
+import { calloutMeta } from './callout'
 
 // MUST match the editor's parser (markdownLanguage = GFM + Subscript +
-// Superscript + Emoji, plus the math extension) so Live == Reading == Export.
-const markdownParser = parser.configure([GFM, Subscript, Superscript, Emoji, mathExtension])
+// Superscript + Emoji, plus the math + Obsidian extensions) so Live == Reading == Export.
+const markdownParser = parser.configure([GFM, Subscript, Superscript, Emoji, mathExtension, obsidianExtension])
 
 // Mark / delimiter nodes that are structural only — produce no HTML.
 // `URL` is intentionally NOT skipped — bare/angle autolinks render via the
@@ -26,6 +29,13 @@ const SKIP_NODES = new Set([
   'LinkTitle', 'StrikethroughMark', 'QuoteMark', 'ListMark',
   'TaskMarker', 'TableDelimiter', 'SubscriptMark', 'SuperscriptMark'
 ])
+
+// Footnote id → display number, populated per serializeToHtml pass.
+let activeFootnotes: Map<string, number> | null = null
+
+// Callout first line:  > [!type] optional title
+const CALLOUT_RE = /^>\s*\[!([\w-]+)\]\s*(.*)$/
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|svg|webp|bmp|avif)$/i
 
 function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -41,19 +51,21 @@ function child(node: SyntaxNode, name: string): SyntaxNode | null {
   return null
 }
 
-/** Render the inline content of a node — text gaps + child nodes, skipping marks. */
-function renderInline(node: SyntaxNode, src: string): string {
+/** Render the inline content of `node` (text gaps + child nodes), skipping
+ * marks. `from`/`to` default to the node bounds and let callers skip
+ * surrounding delimiters (e.g. `==highlight==`). */
+function renderInline(node: SyntaxNode, src: string, from: number = node.from, to: number = node.to): string {
   let html = ''
-  let pos = node.from
+  let pos = from
   for (let c = node.firstChild; c; c = c.nextSibling) {
+    if (c.to <= from || c.from >= to) continue
     if (c.from > pos) html += esc(src.slice(pos, c.from))
     html += renderInlineNode(c, src)
     pos = c.to
   }
-  if (pos < node.to) html += esc(src.slice(pos, node.to))
+  if (pos < to) html += esc(src.slice(pos, to))
   return html
 }
-
 function renderInlineNode(node: SyntaxNode, src: string): string {
   const { name } = node
   if (SKIP_NODES.has(name)) return ''
@@ -104,6 +116,32 @@ function renderInlineNode(node: SyntaxNode, src: string): string {
     }
     case 'InlineMath':
       return `<span class="math math-inline">${renderMath(extractTex(src.slice(node.from, node.to)), false)}</span>`
+    case 'Highlight':
+      return `<mark>${renderInline(node, src, node.from + 2, node.to - 2)}</mark>`
+    case 'Comment':
+      return '' // %%hidden%% in reading/export
+    case 'Tag': {
+      const label = src.slice(node.from, node.to) // includes leading #
+      return `<a class="ofm-tag" href="#">${esc(label)}</a>`
+    }
+    case 'WikiLink': {
+      const inner = src.slice(node.from + 2, node.to - 2)
+      const { target, display } = parseWikiInner(inner)
+      return `<a class="ofm-wikilink" data-target="${escAttr(target)}" href="#">${esc(display)}</a>`
+    }
+    case 'Embed': {
+      const target = src.slice(node.from + 3, node.to - 2)
+      if (IMAGE_EXT_RE.test(target)) {
+        return `<img class="ofm-embed" src="${escAttr(target)}" alt="${escAttr(target)}">`
+      }
+      return `<a class="ofm-embed ofm-embed-ref" data-target="${escAttr(target)}" href="#">📄 ${esc(target)}</a>`
+    }
+    case 'FootnoteRef': {
+      const id = src.slice(node.from + 2, node.to - 1)
+      const n = activeFootnotes?.get(id)
+      if (n === undefined) return esc(src.slice(node.from, node.to))
+      return `<sup class="ofm-fn-ref"><a href="#fn-${escAttr(id)}" id="fnref-${escAttr(id)}">${n}</a></sup>`
+    }
     default:
       return renderInline(node, src)
   }
@@ -165,9 +203,70 @@ function renderTable(node: SyntaxNode, src: string): string {
   return `<table>${rows.join('')}</table>`
 }
 
-/** Serialize a markdown source string to semantic HTML body content. */
-export async function serializeToHtml(src: string): Promise<string> {
+/** Split a `[[target|alias]]` / `[[target#head]]` inner string into target + display. */
+function parseWikiInner(inner: string): { target: string; display: string } {
+  const pipe = inner.indexOf('|')
+  let target: string, alias: string | undefined
+  if (pipe >= 0) { target = inner.slice(0, pipe); alias = inner.slice(pipe + 1) }
+  else { target = inner }
+  let display = alias ?? target
+  if (!alias) {
+    const h = target.indexOf('#')
+    if (h === 0) display = target.slice(1) || target // [[#Heading]] → Heading
+    else if (h > 0) display = target.slice(0, h)      // [[Note#Head]] → Note
+  }
+  return { target, display }
+}
+/** Render a `---\n…\n---` frontmatter block as a properties table. */
+function renderFrontmatter(raw: string): string {
+  const lines = raw.split('\n').filter((l) => l && l !== '---' && l !== '...')
+  const rows = lines.map((l) => {
+    const ci = l.indexOf(':')
+    const key = ci >= 0 ? l.slice(0, ci).trim() : l.trim()
+    const val = ci >= 0 ? l.slice(ci + 1).trim() : ''
+    return `<tr><th>${esc(key)}</th><td>${esc(val)}</td></tr>`
+  })
+  return `<div class="ofm-frontmatter"><table>${rows.join('')}</table></div>`
+}
+
+/** Render a callout (`> [!type] title` blockquote) as a titled, typed card with icon. */
+function renderCallout(node: SyntaxNode, src: string): string {
+  const raw = src.slice(node.from, node.to)
+  const lines = raw.split('\n')
+  const m = (lines[0] || '').match(CALLOUT_RE)
+  if (!m) return `<blockquote>${renderBlocks(node, src).trim()}</blockquote>`
+  const meta = calloutMeta(m[1])
+  const title = m[2].trim()
+  const titleHtml = esc(title || meta.defaultTitle)
+  // Body = remaining lines with the leading `>` (and optional space) stripped.
+  const body = lines.slice(1).map((l) => l.replace(/^>\s?/, '')).join('\n')
+  const sub = markdownParser.parse(body)
+  const bodyHtml = renderBlocks(sub.topNode, body).trim()
+  return `<div class="ofm-callout ofm-callout-${escAttr(meta.type)}">` +
+    `<div class="ofm-callout-title">${meta.icon}<span>${titleHtml}</span></div>` +
+    `<div class="ofm-callout-body">${bodyHtml}</div></div>`
+}
+
+/** Serialize a markdown source string to semantic HTML body content.
+ *  `dark` selects the Mermaid theme (diagrams are pre-rendered to SVG). */
+export async function serializeToHtml(src: string, dark = false): Promise<string> {
   const tree = markdownParser.parse(src)
+
+  // Footnote pass: collect definitions in document order, number them, and
+  // expose the map to FootnoteRef rendering via the module-level state.
+  const fnDefs: { id: string; body: string }[] = []
+  tree.iterate({
+    enter(n) {
+      if (n.name === 'FootnoteDef') {
+        const rm = src.slice(n.from, n.to).match(/^\[\^([\w-]+)\]:\s*([\s\S]*)$/)
+        if (rm) fnDefs.push({ id: rm[1], body: rm[2] })
+      }
+    }
+  })
+  const fnMap = new Map<string, number>()
+  fnDefs.forEach((f, i) => fnMap.set(f.id, i + 1))
+  activeFootnotes = fnMap
+
   const parts: string[] = []
 
   for (let node = tree.topNode.firstChild; node; node = node.nextSibling) {
@@ -201,9 +300,13 @@ export async function serializeToHtml(src: string): Promise<string> {
         parts.push(`<${ordered ? 'ol' : 'ul'}>${items.join('')}</${ordered ? 'ol' : 'ul'}>`)
         break
       }
-      case 'Blockquote':
-        parts.push(`<blockquote>${renderBlocks(node, src).trim()}</blockquote>`)
+      case 'Blockquote': {
+        // Callout: first line matches `> [!type]`. Else a normal blockquote.
+        const firstLine = src.slice(node.from, node.to).split('\n')[0] || ''
+        if (CALLOUT_RE.test(firstLine)) parts.push(renderCallout(node, src))
+        else parts.push(`<blockquote>${renderBlocks(node, src).trim()}</blockquote>`)
         break
+      }
       case 'FencedCode':
       case 'CodeBlock': { // indented code is the `CodeBlock` node (NOT `IndentedCode`)
         // A CodeBlock holds one CodeText child per source line; concatenate all.
@@ -213,8 +316,12 @@ export async function serializeToHtml(src: string): Promise<string> {
         }
         const infoNode = child(node, 'CodeInfo')
         const lang = infoNode ? src.slice(infoNode.from, infoNode.to).trim() : ''
-        const codeParser = await resolveCodeParser(lang)
-        parts.push(highlightCodeToHtml(code, codeParser))
+        if (lang.toLowerCase() === 'mermaid') {
+          parts.push(`<div class="ofm-mermaid">${await renderMermaid(code, dark)}</div>`)
+        } else {
+          const codeParser = await resolveCodeParser(lang)
+          parts.push(highlightCodeToHtml(code, codeParser))
+        }
         break
       }
       case 'HTMLBlock':
@@ -225,6 +332,11 @@ export async function serializeToHtml(src: string): Promise<string> {
       case 'HorizontalRule':
         parts.push('<hr>')
         break
+      case 'Frontmatter':
+        parts.push(renderFrontmatter(src.slice(node.from, node.to)))
+        break
+      case 'FootnoteDef':
+        break // rendered in the footnotes section at the end
       case 'Table':
         parts.push(renderTable(node, src))
         break
@@ -235,7 +347,15 @@ export async function serializeToHtml(src: string): Promise<string> {
         parts.push(renderInline(node, src))
     }
   }
-  return parts.join('\n')
+  let out = parts.join('\n')
+  if (fnDefs.length) {
+    const items = fnDefs
+      .map((f) => `<li id="fn-${escAttr(f.id)}">${esc(f.body)} <a href="#fnref-${escAttr(f.id)}" class="ofm-fn-back">↩</a></li>`)
+      .join('')
+    out += `\n<section class="ofm-footnotes"><hr><ol>${items}</ol></section>`
+  }
+  activeFootnotes = null
+  return out
 }
 
 const EXPORT_CSS = `
@@ -269,6 +389,44 @@ html,body{margin:0;background:var(--bg);color:var(--text);font-family:Fraunces,G
 .prose th{background:var(--surface-2);font-weight:600}
 .prose img{max-width:100%;border-radius:8px}
 .prose .math-display{margin:1em 0;text-align:center}
+.prose mark{background:rgba(15,110,100,0.10);padding:0.05em 0.15em;border-radius:3px}
+.dark .prose mark{background:rgba(61,217,198,0.12)}
+.prose .ofm-tag{display:inline-block;padding:0 0.4em;background:var(--surface-2);border:1px solid var(--border);border-radius:999px;color:var(--text-muted);text-decoration:none;font-size:0.82em;font-family:system-ui,sans-serif}
+.prose .ofm-wikilink,.prose .ofm-embed-ref{display:inline-block;padding:0 0.4em;background:rgba(15,110,100,0.10);border-radius:4px;color:var(--accent);text-decoration:none;font-size:0.92em;font-family:system-ui,sans-serif}
+.dark .prose .ofm-wikilink,.dark .prose .ofm-embed-ref{background:rgba(61,217,198,0.12)}
+.prose img.ofm-embed{max-width:100%;border-radius:8px;margin:0.6em 0;display:block}
+.prose .ofm-fn-ref{font-size:0.75em;line-height:0}
+.prose .ofm-fn-ref a{color:var(--accent);text-decoration:none}
+.prose .ofm-footnotes{font-size:0.85em;color:var(--text-muted);margin-top:2em}
+.prose .ofm-footnotes ol{padding-left:1.4em}
+.prose .ofm-frontmatter{margin:0 0 1.2em;border:1px solid var(--border);border-radius:8px;overflow:hidden;font-family:system-ui,sans-serif;font-size:0.86em}
+.prose .ofm-frontmatter table{width:100%;border-collapse:collapse;margin:0}
+.prose .ofm-frontmatter th,.prose .ofm-frontmatter td{border:none;border-top:1px solid var(--border);padding:4px 10px;text-align:left}
+.prose .ofm-frontmatter tr:first-child th,.prose .ofm-frontmatter tr:first-child td{border-top:none}
+.prose .ofm-frontmatter th{color:var(--text-muted);width:30%;font-weight:500}
+.prose .ofm-callout{margin:1em 0;border:1px solid var(--border);border-left:4px solid var(--accent);border-radius:6px;background:var(--surface-2);overflow:hidden}
+.prose .ofm-callout-title{display:flex;align-items:center;gap:0.4em;font-weight:600;font-family:system-ui,sans-serif;font-size:0.95em;padding:0.5em 1em;color:var(--accent)}
+.prose .ofm-callout-title svg{width:16px;height:16px;flex-shrink:0}
+.prose .ofm-callout-title span{color:var(--text)}
+.prose .ofm-callout-body{padding:0 1em 0.6em}
+.prose .ofm-callout-body>:first-child{margin-top:0}
+.prose .ofm-callout-body>:last-child{margin-bottom:0}
+.prose .ofm-callout-note,.prose .ofm-callout-info,.prose .ofm-callout-abstract,.prose .ofm-callout-summary,.prose .ofm-callout-quote{border-left-color:var(--hl-function)}
+.prose .ofm-callout-note .ofm-callout-title,.prose .ofm-callout-info .ofm-callout-title,.prose .ofm-callout-abstract .ofm-callout-title,.prose .ofm-callout-summary .ofm-callout-title,.prose .ofm-callout-quote .ofm-callout-title{color:var(--hl-function)}
+.prose .ofm-callout-tip,.prose .ofm-callout-important{border-left-color:#C2410C}
+.prose .ofm-callout-tip .ofm-callout-title,.prose .ofm-callout-important .ofm-callout-title{color:#C2410C}
+.prose .ofm-callout-success,.prose .ofm-callout-check,.prose .ofm-callout-done{border-left-color:var(--hl-string)}
+.prose .ofm-callout-success .ofm-callout-title,.prose .ofm-callout-check .ofm-callout-title,.prose .ofm-callout-done .ofm-callout-title{color:var(--hl-string)}
+.prose .ofm-callout-question,.prose .ofm-callout-faq{border-left-color:var(--hl-keyword)}
+.prose .ofm-callout-question .ofm-callout-title,.prose .ofm-callout-faq .ofm-callout-title{color:var(--hl-keyword)}
+.prose .ofm-callout-warning,.prose .ofm-callout-caution,.prose .ofm-callout-attention{border-left-color:var(--hl-number)}
+.prose .ofm-callout-warning .ofm-callout-title,.prose .ofm-callout-caution .ofm-callout-title,.prose .ofm-callout-attention .ofm-callout-title{color:var(--hl-number)}
+.prose .ofm-callout-danger,.prose .ofm-callout-error,.prose .ofm-callout-failure,.prose .ofm-callout-bug{border-left-color:#B4341F}
+.prose .ofm-callout-danger .ofm-callout-title,.prose .ofm-callout-error .ofm-callout-title,.prose .ofm-callout-failure .ofm-callout-title,.prose .ofm-callout-bug .ofm-callout-title{color:#B4341F}
+.prose .ofm-callout-example{border-left-color:var(--hl-type)}
+.prose .ofm-callout-example .ofm-callout-title{color:var(--hl-type)}
+.prose .ofm-mermaid{margin:1em 0;text-align:center;overflow-x:auto}
+.prose .ofm-mermaid svg{max-width:100%;height:auto}
 ${codeHighlightCss()}
 `
 

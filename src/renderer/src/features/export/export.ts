@@ -11,7 +11,7 @@ export async function exportMarkdown(doc: Doc): Promise<void> {
 }
 
 export async function exportHtml(doc: Doc, dark: boolean): Promise<string | null> {
-  const body = await serializeToHtml(doc.content)
+  const body = await serializeToHtml(doc.content, dark)
   const html = wrapExportDocument(body, dark)
   const defaultName = (doc.path ? basename(doc.path) : doc.name).replace(/\.[^.]+$/, '') + '.html'
   const savePath = await api().pickSavePath(defaultName)
@@ -21,7 +21,7 @@ export async function exportHtml(doc: Doc, dark: boolean): Promise<string | null
 }
 
 export async function exportPdf(doc: Doc, dark: boolean): Promise<string | null> {
-  const body = await serializeToHtml(doc.content)
+  const body = await serializeToHtml(doc.content, dark)
   const html = wrapExportDocument(body, dark)
   return api().exportPdf(html)
 }

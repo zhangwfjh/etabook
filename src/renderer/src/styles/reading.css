@@ -126,3 +126,98 @@
   margin: 1em 0;
   overflow-x: auto;
 }
+
+/* ============================================================================
+   OBSIDIAN-FLAVORED MARKDOWN (reading + exported HTML/PDF)
+   ========================================================================== */
+
+/* Highlight ==x== */
+.prose mark { background: var(--accent-soft); color: inherit; padding: 0.05em 0.15em; border-radius: 3px; }
+
+/* Tags #name — themed pill */
+.prose .ofm-tag {
+  display: inline-block; padding: 0 0.4em; margin: 0 0.1em;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: 999px; color: var(--text-muted); text-decoration: none;
+  font-size: 0.82em; font-family: var(--font-sans);
+}
+.prose .ofm-tag:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Wikilink / embed-ref chips */
+.prose .ofm-wikilink,
+.prose .ofm-embed-ref {
+  display: inline-block; padding: 0 0.4em; margin: 0 0.1em;
+  background: var(--accent-soft); border-radius: 4px;
+  color: var(--accent); text-decoration: none;
+  font-size: 0.92em; font-family: var(--font-sans);
+}
+.prose .ofm-wikilink:hover,
+.prose .ofm-embed-ref:hover { text-decoration: underline; }
+.prose img.ofm-embed { max-width: 100%; border-radius: 8px; margin: 0.6em 0; display: block; }
+
+/* Footnotes */
+.prose .ofm-fn-ref { font-size: 0.75em; line-height: 0; }
+.prose .ofm-fn-ref a { color: var(--accent); text-decoration: none; }
+.prose .ofm-footnotes { font-size: 0.85em; color: var(--text-muted); margin-top: 2em; }
+.prose .ofm-footnotes hr { margin-bottom: 0.6em; }
+.prose .ofm-footnotes ol { padding-left: 1.4em; }
+.prose .ofm-footnotes li { margin: 0.2em 0; }
+.prose .ofm-fn-back { text-decoration: none; margin-left: 0.3em; }
+
+/* Frontmatter — properties table */
+.prose .ofm-frontmatter { margin: 0 0 1.2em; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-family: var(--font-sans); font-size: 0.86em; }
+.prose .ofm-frontmatter table { width: 100%; border-collapse: collapse; margin: 0; }
+.prose .ofm-frontmatter th,
+.prose .ofm-frontmatter td { border: none; border-top: 1px solid var(--border); padding: 4px 10px; text-align: left; }
+.prose .ofm-frontmatter tr:first-child th,
+.prose .ofm-frontmatter tr:first-child td { border-top: none; }
+.prose .ofm-frontmatter th { color: var(--text-muted); width: 30%; font-weight: 500; }
+
+/* Callouts — typed cards with icon + title */
+.prose .ofm-callout {
+  margin: 1em 0; border: 1px solid var(--border);
+  border-left: 4px solid var(--accent); border-radius: 6px; background: var(--surface-2);
+  overflow: hidden;
+}
+.prose .ofm-callout-title {
+  display: flex; align-items: center; gap: 0.4em;
+  font-weight: 600; font-family: var(--font-sans); font-size: 0.95em;
+  padding: 0.5em 1em; color: var(--accent);
+}
+.prose .ofm-callout-title svg { width: 16px; height: 16px; flex-shrink: 0; }
+.prose .ofm-callout-title span { color: var(--text); }
+.prose .ofm-callout-body { padding: 0 1em 0.6em; }
+.prose .ofm-callout-body > :first-child { margin-top: 0; }
+.prose .ofm-callout-body > :last-child { margin-bottom: 0; }
+/* Per-type accent color (border + icon via currentColor) */
+.prose .ofm-callout-note, .prose .ofm-callout-info, .prose .ofm-callout-abstract,
+.prose .ofm-callout-summary, .prose .ofm-callout-tldr, .prose .ofm-callout-quote,
+.prose .ofm-callout-seealso, .prose .ofm-callout-cite { border-left-color: var(--hl-function); }
+.prose .ofm-callout-note .ofm-callout-title, .prose .ofm-callout-info .ofm-callout-title,
+.prose .ofm-callout-abstract .ofm-callout-title, .prose .ofm-callout-summary .ofm-callout-title,
+.prose .ofm-callout-tldr .ofm-callout-title, .prose .ofm-callout-quote .ofm-callout-title,
+.prose .ofm-callout-seealso .ofm-callout-title, .prose .ofm-callout-cite .ofm-callout-title { color: var(--hl-function); }
+.prose .ofm-callout-tip, .prose .ofm-callout-hint, .prose .ofm-callout-important { border-left-color: #C2410C; }
+.prose .ofm-callout-tip .ofm-callout-title, .prose .ofm-callout-hint .ofm-callout-title,
+.prose .ofm-callout-important .ofm-callout-title { color: #C2410C; }
+.prose .ofm-callout-success, .prose .ofm-callout-check, .prose .ofm-callout-done, .prose .ofm-callout-todo { border-left-color: var(--hl-string); }
+.prose .ofm-callout-success .ofm-callout-title, .prose .ofm-callout-check .ofm-callout-title,
+.prose .ofm-callout-done .ofm-callout-title, .prose .ofm-callout-todo .ofm-callout-title { color: var(--hl-string); }
+.prose .ofm-callout-question, .prose .ofm-callout-help, .prose .ofm-callout-faq { border-left-color: var(--hl-keyword); }
+.prose .ofm-callout-question .ofm-callout-title, .prose .ofm-callout-help .ofm-callout-title,
+.prose .ofm-callout-faq .ofm-callout-title { color: var(--hl-keyword); }
+.prose .ofm-callout-warning, .prose .ofm-callout-caution, .prose .ofm-callout-attention { border-left-color: var(--hl-number); }
+.prose .ofm-callout-warning .ofm-callout-title, .prose .ofm-callout-caution .ofm-callout-title,
+.prose .ofm-callout-attention .ofm-callout-title { color: var(--hl-number); }
+.prose .ofm-callout-danger, .prose .ofm-callout-error, .prose .ofm-callout-failure,
+.prose .ofm-callout-fail, .prose .ofm-callout-missing, .prose .ofm-callout-bug { border-left-color: var(--danger); }
+.prose .ofm-callout-danger .ofm-callout-title, .prose .ofm-callout-error .ofm-callout-title,
+.prose .ofm-callout-failure .ofm-callout-title, .prose .ofm-callout-fail .ofm-callout-title,
+.prose .ofm-callout-missing .ofm-callout-title, .prose .ofm-callout-bug .ofm-callout-title { color: var(--danger); }
+.prose .ofm-callout-example { border-left-color: var(--hl-type); }
+.prose .ofm-callout-example .ofm-callout-title { color: var(--hl-type); }
+
+/* Mermaid diagrams */
+.prose .ofm-mermaid { margin: 1em 0; text-align: center; overflow-x: auto; }
+.prose .ofm-mermaid svg { max-width: 100%; height: auto; }
+.mermaid-error { display: inline-block; color: var(--danger); font-family: var(--font-mono); font-size: 0.85em; }

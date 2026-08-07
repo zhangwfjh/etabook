@@ -217,7 +217,7 @@
 .editor-live .lp-math-inline .katex { font-size: 1.05em; }
 .editor-live .lp-math-block { padding: 0.8em 0; text-align: center; overflow-x: auto; }
 .editor-live .lp-math-block .katex-display { margin: 0; }
-/* (footnote CSS removed — no footnote parser extension existed) */
+/* (footnote CSS removed — handled by the Obsidian extension below) */
 
 /* Tables — block widget. Same margin→padding reasoning as HR. */
 .lp-table-wrap { padding: 1em 0; }
@@ -226,6 +226,65 @@
 .lp-table-wrap td { border: 1px solid var(--border); padding: 6px 12px; text-align: left; }
 .lp-table-wrap th { background: var(--surface-2); font-weight: 600; }
 .lp-table-wrap code { font-family: var(--font-mono); font-size: 0.85em; background: var(--surface-2); padding: 0.1em 0.3em; border-radius: 3px; }
+
+/* ============================================================================
+   OBSIDIAN-FLAVORED MARKDOWN (live preview + reading surface)
+   ========================================================================== */
+
+/* Highlight ==x== — inline mark */
+.lp-highlight { background: var(--accent-soft); border-radius: 3px; padding: 0.05em 0.1em; }
+
+/* Tag / wikilink / embed chips — inline widgets */
+.lp-tag-chip,
+.lp-wikilink-chip,
+.lp-embed-ref {
+  display: inline-block; padding: 0 0.4em; margin: 0 0.1em;
+  border-radius: 4px; font-size: 0.92em; font-family: var(--font-sans);
+  cursor: default; text-decoration: none;
+}
+.lp-tag-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); font-size: 0.82em; border-radius: 999px; }
+.lp-wikilink-chip,
+.lp-embed-ref { background: var(--accent-soft); color: var(--accent); }
+.lp-embed-img { max-width: 100%; border-radius: 8px; padding: 0.6em 0; display: block; }
+
+/* Footnote reference `[^id]` mark */
+.lp-footnote-ref { color: var(--text-muted); font-size: 0.85em; }
+
+/* Frontmatter / footnote-def line classes */
+.editor-live .cm-line.lp-frontmatter-line {
+  font-family: var(--font-mono); font-size: 0.88em; color: var(--text-muted);
+  background: var(--surface-2);
+}
+.editor-live .cm-line.lp-fndef-line { color: var(--text-muted); font-size: 0.9em; }
+/* Callout — typed card. Head line gets the icon + title (bold); body lines
+   get the same background/border. Per-type classes set BOTH border-left-color
+   AND color so the icon's currentColor and the title text pick up the hue. */
+.editor-live .cm-line.lp-callout-line {
+  border-left: 4px solid var(--accent);
+  background: var(--surface-2);
+  padding-left: 1em !important;
+}
+.editor-live .cm-line.lp-callout-head { font-weight: 600; }
+.editor-live .cm-line.lp-callout-body { color: var(--text); }
+/* Header widget: icon + title text inline */
+.lp-callout-header { display: inline-flex; align-items: center; gap: 0.35em; }
+.lp-callout-header svg { width: 16px; height: 16px; flex-shrink: 0; }
+.lp-callout-header-text { font-weight: 600; font-family: var(--font-sans); }
+/* Per-type accent color (border + icon/text) */
+.lp-callout-note, .lp-callout-info, .lp-callout-abstract, .lp-callout-summary,
+.lp-callout-tldr, .lp-callout-quote, .lp-callout-seealso { border-left-color: var(--hl-function) !important; color: var(--hl-function); }
+.lp-callout-tip, .lp-callout-hint, .lp-callout-important { border-left-color: #C2410C !important; color: #C2410C; }
+.lp-callout-success, .lp-callout-check, .lp-callout-done, .lp-callout-todo { border-left-color: var(--hl-string) !important; color: var(--hl-string); }
+.lp-callout-question, .lp-callout-help, .lp-callout-faq { border-left-color: var(--hl-keyword) !important; color: var(--hl-keyword); }
+.lp-callout-warning, .lp-callout-caution, .lp-callout-attention { border-left-color: var(--hl-number) !important; color: var(--hl-number); }
+.lp-callout-danger, .lp-callout-error, .lp-callout-failure, .lp-callout-fail,
+.lp-callout-missing, .lp-callout-bug { border-left-color: var(--danger) !important; color: var(--danger); }
+.lp-callout-example { border-left-color: var(--hl-type) !important; color: var(--hl-type); }
+.lp-callout-cite { border-left-color: var(--hl-function) !important; color: var(--hl-function); }
+
+/* Mermaid block widget */
+.lp-mermaid { padding: 0.8em 0; text-align: center; overflow-x: auto; }
+.lp-mermaid svg { max-width: 100%; height: auto; }
 
 /* Search panel (find/replace) */
 .cm-panels { background: var(--surface); border-color: var(--border); color: var(--text); }
@@ -258,9 +317,12 @@
 /* No caret in reading mode — it's a reading surface, not an editor. */
 .editor-reading .cm-content { caret-color: transparent; }
 .editor-reading .cm-cursor { display: none; }
-/* Cursor pointer on links so they read as clickable. */
+/* Cursor pointer on links/wikilinks/tags so they read as clickable. */
 .editor-reading .lp-link,
-.editor-reading .lp-url { cursor: pointer; }
+.editor-reading .lp-url,
+.editor-reading .lp-wikilink-chip,
+.editor-reading .lp-tag-chip,
+.editor-reading .lp-embed-ref { cursor: pointer; }
 /* No active-line highlight in reading mode. */
 .editor-reading .cm-activeLine { background: transparent; }
 /* Selection still works for copy, but is lighter. */
