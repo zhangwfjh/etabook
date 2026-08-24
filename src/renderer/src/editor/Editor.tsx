@@ -24,6 +24,12 @@ export type EditorProps = {
   /** Reading mode: fully rendered, read-only, no source visible anywhere. */
   reading: boolean
   docDir?: string
+  /** Absolute workspace root — enables embed/wikilink Resolution. */
+  workspace?: string
+  /** Reading-mode navigation: open a resolved note path. */
+  onOpenNote?: (path: string) => void
+  /** Absolute path of this document (embed cycle guard). */
+  docPath?: string
   onChange: (text: string) => void
 }
 
@@ -58,7 +64,18 @@ export function Editor(props: EditorProps): React.JSX.Element {
           readonly: props.readonly
         }),
         themeCompartment.of(editorTheme(props.dark)),
-        liveCompartment.of(props.livePreview ? livePreviewPlugin({ docDir: props.docDir, dark: props.dark, reading: props.reading }) : []),
+        liveCompartment.of(
+          props.livePreview
+            ? livePreviewPlugin({
+                docDir: props.docDir,
+                dark: props.dark,
+                reading: props.reading,
+                workspace: props.workspace,
+                docPath: props.docPath,
+                onOpenNote: props.onOpenNote
+              })
+            : []
+        ),
         slashCommands(),
         onChangeExt
       ]
@@ -124,11 +141,18 @@ export function Editor(props: EditorProps): React.JSX.Element {
     view.dispatch({
       effects: view._liveCompartment.reconfigure(
         props.livePreview
-          ? livePreviewPlugin({ docDir: props.docDir, dark: props.dark, reading: props.reading })
+          ? livePreviewPlugin({
+              docDir: props.docDir,
+              dark: props.dark,
+              reading: props.reading,
+              workspace: props.workspace,
+              docPath: props.docPath,
+              onOpenNote: props.onOpenNote
+            })
           : ([] as Extension[])
       )
     })
-  }, [props.livePreview, props.docDir, props.reading, props.dark])
+  }, [props.livePreview, props.docDir, props.reading, props.dark, props.workspace, props.docPath, props.onOpenNote])
 
   return (
     <div

@@ -206,7 +206,9 @@ export const obsidianExtension: MarkdownConfig = {
       }
     },
     {
-      // Footnote definition  [^id]: text  (single-line body).
+      // Footnote definition  [^id]: text  — the first line plus any following
+      // indented (4+ space / tab) continuation lines, so multi-paragraph and
+      // code-bearing footnote bodies stay inside the definition.
       name: 'FootnoteDef',
       before: 'LinkReference',
       parse(cx, line) {
@@ -220,9 +222,27 @@ export const obsidianExtension: MarkdownConfig = {
         }
         if (text.charCodeAt(i) !== RBRACK || text.charCodeAt(i + 1) !== 58 /* : */) return false
         const from = cx.lineStart + base
-        const to = cx.lineStart + text.length
-        cx.addElement(cx.elt('FootnoteDef', from, to))
+        let to = cx.lineStart + text.length
         cx.nextLine()
+        // Consume continuation lines: indented non-blank lines, allowing a
+        // single blank line between them when the next line is indented too.
+        for (;;) {
+          if (line.text.trim() !== '' && /^\s{4,}|\t/.test(line.text)) {
+            to = cx.lineStart + line.text.length
+            if (!cx.nextLine()) break
+            continue
+          }
+          if (line.text.trim() === '') {
+            const peek = cx.peekLine()
+            if (peek !== '' && /^\s{4,}|\t/.test(peek)) {
+              to = cx.lineStart + line.text.length
+              if (!cx.nextLine()) break
+              continue
+            }
+          }
+          break
+        }
+        cx.addElement(cx.elt('FootnoteDef', from, to))
         return true
       }
     }

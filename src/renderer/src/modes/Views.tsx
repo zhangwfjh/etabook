@@ -12,9 +12,15 @@ type Props = {
   livePreview: boolean
   /** Reading mode: same CM6 view fully rendered, read-only, links clickable. */
   reading: boolean
+  /** Absolute workspace root — enables embed/wikilink Resolution. */
+  workspace?: string
+  /** Reading-mode navigation: open a resolved note path. */
+  onOpenNote?: (path: string) => void
 }
 
-export function EditorPane({ doc, onChange, onCursorChange, onView, livePreview, reading }: Props): React.JSX.Element {
+export function EditorPane({
+  doc, onChange, onCursorChange, onView, livePreview, reading, workspace, onOpenNote
+}: Props): React.JSX.Element {
   const { dark, config } = useTheme()
   const docDir = doc.path ? dirname(doc.path) : undefined
 
@@ -30,6 +36,9 @@ export function EditorPane({ doc, onChange, onCursorChange, onView, livePreview,
         livePreview={livePreview}
         reading={reading}
         docDir={docDir}
+        docPath={doc.path}
+        workspace={workspace}
+        onOpenNote={onOpenNote}
         onChange={onChange}
         onCursorChange={onCursorChange}
         onView={onView}

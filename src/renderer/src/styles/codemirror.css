@@ -123,7 +123,8 @@
 }
 
 /* List item indentation */
-.editor-live .cm-line.lp-list-line { padding-left: 1.6em; }
+/* Block indentation (quotes/lists/nesting) is composed per line by the
+   decoration engine as an inline style on .lp-indent-line. */
 
 /* Empty separator lines — collapsed for paragraph rhythm */
 .editor-live .cm-line.lp-blank { line-height: 0.4 !important; min-height: 0.4em; }
@@ -180,8 +181,8 @@
   text-decoration: underline !important;
   text-underline-offset: 2px;
 }
-.lp-sub { vertical-align: sub; font-size: 0.75em; }
-.lp-sup { vertical-align: super; font-size: 0.75em; }
+.lp-sub { position: relative; top: 0.3em; vertical-align: baseline; font-size: 0.75em; }
+.lp-sup { position: relative; top: -0.35em; vertical-align: baseline; font-size: 0.75em; }
 .lp-emoji { font-size: 1.15em; }
 .editor-reading .lp-html-inline,
 .editor-reading .lp-html-block { }
@@ -232,7 +233,7 @@
    ========================================================================== */
 
 /* Highlight ==x== — inline mark */
-.lp-highlight { background: var(--accent-soft); border-radius: 3px; padding: 0.05em 0.1em; }
+.lp-highlight { background: var(--mark-bg); border-radius: 3px; padding: 0.05em 0.1em; }
 
 /* Tag / wikilink / embed chips — inline widgets */
 .lp-tag-chip,
@@ -245,10 +246,33 @@
 .lp-tag-chip { background: var(--surface-2); border: 1px solid var(--border); color: var(--text-muted); font-size: 0.82em; border-radius: 999px; }
 .lp-wikilink-chip,
 .lp-embed-ref { background: var(--accent-soft); color: var(--accent); }
-.lp-embed-img { max-width: 100%; border-radius: 8px; padding: 0.6em 0; display: block; }
+.lp-unresolved { opacity: 0.55; }
+.lp-embed-note { border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 8px; padding: 0.8em 0.9em 1.2em; font-size: 0.95em; }
+.lp-embed-note > :first-child { margin-top: 0; }
+.lp-embed-placeholder { border: 1px dashed var(--border); border-radius: 6px; color: var(--text-muted); font-family: var(--font-sans); font-size: 0.85em; padding: 1em 0.8em; }
+.lp-embed-note .ofm-wikilink, .lp-embed-note .ofm-tag { font-size: 1em; }
 
-/* Footnote reference `[^id]` mark */
-.lp-footnote-ref { color: var(--text-muted); font-size: 0.85em; }
+/* Footnote reference — superscripted number */
+.editor-live .lp-fn-ref { position: relative; top: -0.55em; font-size: 0.75em; line-height: 0; color: var(--accent); cursor: pointer; }
+.lp-tag-chip,
+.lp-wikilink-chip,
+.lp-embed-ref { line-height: 1.4; }
+.lp-emoji { line-height: 1; }
+/* Footnotes section (block widget at doc end) */
+.editor-live .lp-footnotes { font-size: 0.85em; color: var(--text-muted); padding-top: 1.5em; }
+.editor-live .lp-footnotes hr { border: none; border-top: 1px solid var(--border); margin-bottom: 0.6em; }
+.editor-live .lp-footnotes ol { padding-left: 1.4em; }
+.editor-live .lp-footnotes li { margin: 0.2em 0; }
+.editor-live .lp-fn-back { text-decoration: none; margin-left: 0.3em; color: var(--accent); }
+/* Frontmatter properties table (block widget) */
+.editor-live .lp-frontmatter-wrap { padding-bottom: 1.2em; font-family: var(--font-sans); }
+.editor-live .lp-frontmatter-wrap table { width: 100%; border-collapse: collapse; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; font-size: 0.86em; }
+.editor-live .lp-frontmatter-wrap th, .editor-live .lp-frontmatter-wrap td { border: none; border-top: 1px solid var(--border); padding: 4px 10px; text-align: left; }
+.editor-live .lp-frontmatter-wrap tr:first-child th, .editor-live .lp-frontmatter-wrap tr:first-child td { border-top: none; }
+.editor-live .lp-frontmatter-wrap th { color: var(--text-muted); width: 30%; font-weight: 500; }
+
+.editor-reading .lp-link-anchor,
+.editor-reading .lp-fn-ref { cursor: pointer; }
 
 /* Frontmatter / footnote-def line classes */
 .editor-live .cm-line.lp-frontmatter-line {
@@ -262,25 +286,30 @@
 .editor-live .cm-line.lp-callout-line {
   border-left: 4px solid var(--accent);
   background: var(--surface-2);
-  padding-left: 1em !important;
+  padding-left: 1em;
 }
 .editor-live .cm-line.lp-callout-head { font-weight: 600; }
 .editor-live .cm-line.lp-callout-body { color: var(--text); }
-/* Header widget: icon + title text inline */
 .lp-callout-header { display: inline-flex; align-items: center; gap: 0.35em; }
 .lp-callout-header svg { width: 16px; height: 16px; flex-shrink: 0; }
 .lp-callout-header-text { font-weight: 600; font-family: var(--font-sans); }
 /* Per-type accent color (border + icon/text) */
+/* Per-type accent color (border + icon via currentColor). Also exposed as
+   --callout-accent so the decoration engine can draw the card edge as a
+   background layer when the callout is nested inside quotes. */
 .lp-callout-note, .lp-callout-info, .lp-callout-abstract, .lp-callout-summary,
-.lp-callout-tldr, .lp-callout-quote, .lp-callout-seealso { border-left-color: var(--hl-function) !important; color: var(--hl-function); }
-.lp-callout-tip, .lp-callout-hint, .lp-callout-important { border-left-color: #C2410C !important; color: #C2410C; }
-.lp-callout-success, .lp-callout-check, .lp-callout-done, .lp-callout-todo { border-left-color: var(--hl-string) !important; color: var(--hl-string); }
-.lp-callout-question, .lp-callout-help, .lp-callout-faq { border-left-color: var(--hl-keyword) !important; color: var(--hl-keyword); }
-.lp-callout-warning, .lp-callout-caution, .lp-callout-attention { border-left-color: var(--hl-number) !important; color: var(--hl-number); }
+.lp-callout-tldr, .lp-callout-quote, .lp-callout-seealso { --callout-accent: var(--hl-function); border-left-color: var(--hl-function) !important; color: var(--hl-function); }
+.lp-callout-tip, .lp-callout-hint, .lp-callout-important { --callout-accent: #C2410C; border-left-color: #C2410C !important; color: #C2410C; }
+.lp-callout-success, .lp-callout-check, .lp-callout-done, .lp-callout-todo { --callout-accent: var(--hl-string); border-left-color: var(--hl-string) !important; color: var(--hl-string); }
+.lp-callout-question, .lp-callout-help, .lp-callout-faq { --callout-accent: var(--hl-keyword); border-left-color: var(--hl-keyword) !important; color: var(--hl-keyword); }
+.lp-callout-warning, .lp-callout-caution, .lp-callout-attention { --callout-accent: var(--hl-number); border-left-color: var(--hl-number) !important; color: var(--hl-number); }
 .lp-callout-danger, .lp-callout-error, .lp-callout-failure, .lp-callout-fail,
-.lp-callout-missing, .lp-callout-bug { border-left-color: var(--danger) !important; color: var(--danger); }
-.lp-callout-example { border-left-color: var(--hl-type) !important; color: var(--hl-type); }
-.lp-callout-cite { border-left-color: var(--hl-function) !important; color: var(--hl-function); }
+.lp-callout-missing, .lp-callout-bug { --callout-accent: var(--danger); border-left-color: var(--danger) !important; color: var(--danger); }
+.lp-callout-example { --callout-accent: var(--hl-type); border-left-color: var(--hl-type) !important; color: var(--hl-type); }
+/* Callout nested inside quotes: the card edge is drawn as background layers
+   beyond the ancestor quote bars, so the CSS border must go. */
+.editor-live .cm-line.lp-callout-nested { border-left: none !important; background-color: transparent !important; }
+.lp-callout-cite { --callout-accent: var(--hl-function); border-left-color: var(--hl-function) !important; color: var(--hl-function); }
 
 /* Mermaid block widget */
 .lp-mermaid { padding: 0.8em 0; text-align: center; overflow-x: auto; }

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeTheme, shell, Menu } from 'electron'
+import { app, BrowserWindow, nativeTheme, protocol, net, shell, Menu } from 'electron'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { registerFileIpc } from './ipc/files'
@@ -7,11 +7,36 @@ import { buildAppMenu } from './menu'
 
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
+
+// Local-file image protocol. The renderer (http origin in dev, file:// in
+// production) cannot load file:// subresources — Chromium blocks cross-origin
+// file access. This streams local images regardless of origin; the renderer's
+// IPC surface already grants full local read access, so no new capability.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'etabook-file', privileges: { standard: true, secure: true } }
+])
+
+function registerLocalFileProtocol(): void {
+  protocol.handle('etabook-file', (request) => {
+    // Standard-scheme URLs parse the Windows drive letter as the host
+    // (`etabook-file://d/etabook/...`); reassemble it into the file path.
+    const u = new URL(request.url)
+    const host = u.host
+    const path = decodeURIComponent(u.pathname)
+    const abs = host ? `${host}:${path}` : path
+    return net.fetch('file:///' + abs.replace(/^\/+/, ''))
+  })
+}
+
 process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true'
 // Dev-only: expose a CDP endpoint so the test harness can drive the renderer
 // over Chromium DevTools Protocol (see test/runner.ts). No-op in packaged builds.
 if (isDev) {
   app.commandLine.appendSwitch('remote-debugging-port', '9223')
+  // Keep the renderer processing input/paints while the window is occluded or
+  // the session is disconnected (RDP) — otherwise CDP input dispatch stalls.
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+  app.commandLine.appendSwitch('disable-renderer-backgrounding')
   app.commandLine.appendSwitch('remote-allow-origins', '*')
 }
 
@@ -86,6 +111,7 @@ if (!gotLock) {
   })
 
   app.whenReady().then(async () => {
+    registerLocalFileProtocol()
     registerFileIpc(getMainWindow)
     registerExportIpc(getMainWindow)
     await refreshMenu()

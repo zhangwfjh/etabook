@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactElement } from 'react'
 import {
   PanelLeft,
   Eye,
@@ -9,7 +9,7 @@ import {
   Moon,
   Sidebar as SidebarIcon
 } from 'lucide-react'
-import { type EditorView } from '@codemirror/view'
+import type { EditorView as EditorViewType } from '@codemirror/view'
 import { api } from '@renderer/lib/ipc'
 import { useStore, useActiveDoc, type Doc } from '@renderer/lib/store'
 import { useTheme } from '@renderer/features/settings/ThemeProvider'
@@ -37,11 +37,21 @@ export function App(): ReactElement {
   const [refreshKey, setRefreshKey] = useState(0)
 
   // Keep the active EditorView reachable for toolbar/find commands.
-  const setGlobalView = (view: EditorView | null): void => {
-    ;(window as unknown as { __editorView?: EditorView }).__editorView = view ?? undefined
+  const setGlobalView = (view: EditorViewType | null): void => {
+    ;(window as unknown as { __editorView?: EditorViewType }).__editorView = view ?? undefined
   }
 
-  // --- Menu + IPC wiring -----------------------------------------------------
+  // Keep the store dispatch reachable for the interactive test harness
+  // (mirrors the __editorView pattern; dispatch is stable across renders).
+  ;(window as unknown as { __storeDispatch?: typeof dispatch }).__storeDispatch = dispatch
+
+  const openPath = useCallback((path: string): void => {
+    api()
+      .readFile(path)
+      .then(({ content }) => dispatch({ type: 'open-doc', path, content }))
+      .catch(() => {})
+  }, [])
+
   useEffect(() => {
     const offMenu = api().onMenuAction((action: MenuAction) => handleMenuAction(action))
     const offRecent = api().onOpenRecent((path) => openPath(path))
@@ -51,13 +61,6 @@ export function App(): ReactElement {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.docs, state.activeId])
-
-  function openPath(path: string): void {
-    api()
-      .readFile(path)
-      .then(({ content }) => dispatch({ type: 'open-doc', path, content }))
-      .catch(() => {})
-  }
 
   // --- Actions ---------------------------------------------------------------
   function newDoc(): void {
@@ -154,10 +157,10 @@ export function App(): ReactElement {
         void exportMarkdown(doc ?? state.docs[0])
         break
       case 'export-html':
-        void exportHtml(doc ?? state.docs[0], dark)
+        void exportHtml(doc ?? state.docs[0], dark, state.workspace)
         break
       case 'export-pdf':
-        void exportPdf(doc ?? state.docs[0], dark)
+        void exportPdf(doc ?? state.docs[0], dark, state.workspace)
         break
     }
   }
@@ -177,8 +180,8 @@ export function App(): ReactElement {
     onOpenShortcuts: () => dispatch({ type: 'shortcuts', open: true }),
     onFind: () => openFind(getActiveEditorView()),
     onExportMd: () => void exportMarkdown(activeDoc ?? state.docs[0]),
-    onExportHtml: () => void exportHtml(activeDoc ?? state.docs[0], dark),
-    onExportPdf: () => void exportPdf(activeDoc ?? state.docs[0], dark)
+    onExportHtml: () => void exportHtml(activeDoc ?? state.docs[0], dark, state.workspace),
+    onExportPdf: () => void exportPdf(activeDoc ?? state.docs[0], dark, state.workspace),
   })
 
   // Build a fresh welcome doc name only when needed.
@@ -257,6 +260,8 @@ export function App(): ReactElement {
               <EditorPaneBridge
                 doc={activeDoc}
                 mode={state.mode}
+                workspace={state.workspace}
+                onOpenNote={openPath}
                 onChange={(text) => dispatch({ type: 'set-content', id: activeDoc.id, content: text })}
                 onCursorChange={setCursorPos}
                 onReady={setGlobalView}
@@ -305,21 +310,27 @@ function ModeButton({
 function EditorPaneBridge({
   doc,
   mode,
+  workspace,
   onChange,
   onCursorChange,
-  onReady
+  onReady,
+  onOpenNote
 }: {
   doc: Doc
   mode: 'source' | 'live' | 'reading'
+  workspace?: string
   onChange: (text: string) => void
   onCursorChange: (pos: number) => void
-  onReady: (view: import('@codemirror/view').EditorView | null) => void
+  onReady: (view: EditorViewType | null) => void
+  onOpenNote?: (path: string) => void
 }): ReactElement {
   return (
     <EditorPane
       doc={doc}
       livePreview={mode === 'live' || mode === 'reading'}
       reading={mode === 'reading'}
+      workspace={workspace}
+      onOpenNote={onOpenNote}
       onChange={onChange}
       onCursorChange={onCursorChange}
       onView={onReady}

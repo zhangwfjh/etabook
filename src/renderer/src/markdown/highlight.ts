@@ -33,6 +33,24 @@ export const codeHighlightStyle: HighlightStyle = HighlightStyle.define([
 
 // --- Parser resolution (lazy grammars) ---------------------------------------
 
+// Common short aliases that LanguageDescription does not fuzzy-match
+// (verified: `py` fails while `python` resolves). Applied before matching.
+export const LANG_ALIASES: Record<string, string> = {
+  py: 'python',
+  rb: 'ruby',
+  js: 'javascript',
+  ts: 'typescript',
+  sh: 'shell',
+  zsh: 'shell',
+  yml: 'yaml',
+  md: 'markdown',
+  kt: 'kotlin',
+  rs: 'rust',
+  cs: 'csharp',
+  fs: 'fsharp',
+  'c++': 'cpp',
+  hs: 'haskell'
+}
 const parserCache = new Map<string, Parser | null>()
 
 /** Resolve a Lezer parser for a fenced-code info string; null if unknown. */
@@ -42,7 +60,7 @@ export async function resolveCodeParser(lang: string): Promise<Parser | null> {
   if (parserCache.has(key)) return parserCache.get(key) ?? null
   let result: Parser | null = null
   try {
-    const desc = LanguageDescription.matchLanguageName(languages, key)
+    const desc = LanguageDescription.matchLanguageName(languages, LANG_ALIASES[key] ?? key)
     if (desc) {
       const support = await desc.load()
       result = support.language.parser ?? null
