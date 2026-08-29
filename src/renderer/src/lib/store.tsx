@@ -47,12 +47,16 @@ function genId(): string {
 }
 
 function initial(): AppState {
+  // The welcome doc starts clean: its baseline is its own content, so an
+  // edit followed by a full undo returns to "Saved" (it has no path, so
+  // nothing but an explicit save can ever re-baseline it).
+  const content = welcomeContent()
   const first: Doc = {
     id: genId(),
     name: nextUntitledName(),
-    content: welcomeContent(),
+    content,
     dirty: false,
-    savedContent: '',
+    savedContent: content,
     selection: null,
     scroll: 0
   }

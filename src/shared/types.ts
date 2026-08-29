@@ -21,6 +21,10 @@ export type MenuAction =
   | { type: 'mode-reading' }
   | { type: 'command-palette' }
   | { type: 'find' }
+  | { type: 'replace' }
+  | { type: 'find-next' }
+  | { type: 'find-prev' }
+  | { type: 'goto-line' }
   | { type: 'toggle-sidebar' }
   | { type: 'toggle-theme' }
 

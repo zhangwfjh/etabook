@@ -24,7 +24,15 @@ import { CommandPalette } from '@renderer/features/commandPalette/CommandPalette
 import { buildCommands } from '@renderer/features/commandPalette/commands'
 import { SettingsModal } from '@renderer/features/settings/SettingsModal'
 import { ShortcutsModal } from '@renderer/features/shortcuts/ShortcutsModal'
-import { openFind } from '@renderer/features/findReplace/findReplace'
+import {
+  openFind,
+  openReplace,
+  findNextMatch,
+  findPrevMatch,
+  promptGotoLine
+} from '@renderer/features/findReplace/findReplace'
+import { dropEditorState } from '@renderer/editor/Editor'
+import { installEditorApi } from '@renderer/features/findReplace/editorApi'
 import { exportMarkdown, exportHtml, exportPdf } from '@renderer/features/export/export'
 import { nextUntitledName } from '@renderer/lib/fs'
 import type { MenuAction } from '@shared/types'
@@ -41,9 +49,12 @@ export function App(): ReactElement {
     ;(window as unknown as { __editorView?: EditorViewType }).__editorView = view ?? undefined
   }
 
+  installEditorApi()
+
   // Keep the store dispatch reachable for the interactive test harness
   // (mirrors the __editorView pattern; dispatch is stable across renders).
   ;(window as unknown as { __storeDispatch?: typeof dispatch }).__storeDispatch = dispatch
+  ;(window as unknown as { __storeGetState?: () => typeof state }).__storeGetState = () => state
 
   const openPath = useCallback((path: string): void => {
     api()
@@ -112,10 +123,11 @@ export function App(): ReactElement {
   }
 
   async function closeDocWithConfirm(id: string): Promise<void> {
-    const doc = state.docs.find((d) => d.id === id)
-    if (doc?.dirty && !window.confirm(`Close ${doc.name} without saving?`)) return
-    dispatch({ type: 'close-doc', id })
-  }
+     const doc = state.docs.find((d) => d.id === id)
+     if (doc?.dirty && !window.confirm(`Close ${doc.name} without saving?`)) return
+    dropEditorState(id)
+     dispatch({ type: 'close-doc', id })
+   }
 
   function handleMenuAction(action: MenuAction): void {
     const doc = activeDoc
@@ -150,8 +162,20 @@ export function App(): ReactElement {
       case 'command-palette':
         dispatch({ type: 'palette', open: true })
         break
-      case 'find':
-        openFind(getActiveEditorView())
+       case 'find':
+         openFind(getActiveEditorView())
+         break
+      case 'replace':
+        openReplace(getActiveEditorView())
+        break
+      case 'find-next':
+        findNextMatch(getActiveEditorView())
+        break
+      case 'find-prev':
+        findPrevMatch(getActiveEditorView())
+        break
+      case 'goto-line':
+        promptGotoLine(getActiveEditorView())
         break
       case 'export-md':
         void exportMarkdown(doc ?? state.docs[0])

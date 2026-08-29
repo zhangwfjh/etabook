@@ -91,6 +91,28 @@ export async function buildAppMenu(mainWindow: () => BrowserWindow | null): Prom
           label: 'Find',
           accelerator: 'CmdOrCtrl+F',
           click: () => send(win(), { type: 'find' })
+        },
+        {
+          label: 'Replace',
+          accelerator: 'CmdOrCtrl+H',
+          click: () => send(win(), { type: 'replace' })
+        },
+        { type: 'separator' },
+        {
+          label: 'Find Next',
+          accelerator: 'CmdOrCtrl+G',
+          click: () => send(win(), { type: 'find-next' })
+        },
+        {
+          label: 'Find Previous',
+          accelerator: 'CmdOrCtrl+Shift+G',
+          click: () => send(win(), { type: 'find-prev' })
+        },
+        { type: 'separator' },
+        {
+          label: 'Go to Line…',
+          accelerator: 'CmdOrCtrl+Alt+G',
+          click: () => send(win(), { type: 'goto-line' })
         }
       ]
     },

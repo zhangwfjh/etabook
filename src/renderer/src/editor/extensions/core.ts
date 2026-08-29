@@ -17,7 +17,7 @@ import {
   indentOnInput,
   syntaxHighlighting
 } from '@codemirror/language'
-import { highlightSelectionMatches } from '@codemirror/search'
+import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
 import {
   closeBrackets,
   closeBracketsKeymap
@@ -78,6 +78,7 @@ export function coreExtensions(opts: {
     highlightActiveLine(),
     highlightActiveLineGutter(),
     highlightSpecialChars(),
+    search({ top: true }),
     highlightSelectionMatches(),
     syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
     EditorView.lineWrapping,
@@ -96,6 +97,7 @@ export function coreExtensions(opts: {
       ...closeBracketsKeymap,
       ...defaultKeymap,
       ...historyKeymap,
+      ...searchKeymap,
       indentWithTab
     ]),
     markdownKeymapExtension()
