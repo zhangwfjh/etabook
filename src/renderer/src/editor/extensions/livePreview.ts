@@ -5,8 +5,17 @@ import {
   type ViewUpdate,
   WidgetType,
   EditorView,
+  keymap,
 } from '@codemirror/view'
-import { Prec, StateField, Facet, type Extension, type EditorState, type Range } from '@codemirror/state'
+import {
+  EditorSelection,
+  Prec,
+  StateField,
+  Facet,
+  type Extension,
+  type EditorState,
+  type Range,
+} from '@codemirror/state'
 import { ensureSyntaxTree, syntaxTree } from '@codemirror/language'
 import type { SyntaxNode } from '@lezer/common'
 import { renderMath, extractTex } from '../../markdown/katex'
@@ -1249,9 +1258,19 @@ class ImageBlockWidget extends WidgetType {
   }
 }
 
-function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
+interface BlockDecorations {
+  /** All block decorations (replaces + block widgets). */
+  decos: DecorationSet
+  /** Ranges whose lines are hidden behind block-replace widgets. */
+  hidden: { from: number; to: number }[]
+}
+
+function blockDecorationField(state: EditorState, ctx: LpCtx): BlockDecorations {
   const doc = state.doc
   const ranges: Range<Decoration>[] = []
+  // Block-replaced ranges (whole lines hidden behind a widget) — consumed by
+  // the arrow-key motion fix below (blockMotionKeymap).
+  const hidden: { from: number; to: number }[] = []
   const activeLines = new Set<number>()
   if (!state.facet(readingModeFacet)) {
     for (const r of state.selection.ranges) {
@@ -1294,6 +1313,7 @@ function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
             : '<table></table>'
           const replaceTo = doc.lineAt(node.to).to
           ranges.push(Decoration.replace({ block: true, widget: new TableWidget(html) }).range(node.from, replaceTo))
+          hidden.push({ from: node.from, to: replaceTo })
         }
       }
       // Frontmatter → properties-table block widget (same HTML as export).
@@ -1309,6 +1329,7 @@ function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
           ranges.push(
             Decoration.replace({ block: true, widget: new FrontmatterWidget(doc.sliceString(node.from, node.to)) }).range(node.from, replaceTo)
           )
+          hidden.push({ from: node.from, to: replaceTo })
         }
       }
       // Footnote definitions: hidden here; rendered once in the section widget.
@@ -1322,12 +1343,14 @@ function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
         if (!anyActive) {
           const replaceTo = doc.lineAt(node.to).to
           ranges.push(Decoration.replace({ block: true, widget: BLANK_BLOCK }).range(node.from, replaceTo))
+          hidden.push({ from: node.from, to: replaceTo })
         }
       }
       if (node.name === 'HorizontalRule' && node.from < node.to) {
         const lineNum = doc.lineAt(node.from).number
         if (!activeLines.has(lineNum)) {
           ranges.push(Decoration.replace({ block: true, widget: new HrWidget() }).range(node.from, node.to))
+          hidden.push({ from: node.from, to: node.to })
         }
       }
       if (node.name === 'Image' && node.from < node.to) {
@@ -1364,6 +1387,7 @@ function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
           ranges.push(
             Decoration.replace({ block: true, widget: new BlockMathWidget(extractTex(raw)) }).range(node.from, replaceTo)
           )
+          hidden.push({ from: node.from, to: replaceTo })
         }
       }
       // Raw HTML block / HTML comment.
@@ -1385,6 +1409,7 @@ function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
             // CommentBlock: hide it entirely (DOM strips comments).
             ranges.push(Decoration.replace({ block: true, widget: BLANK_BLOCK }).range(node.from, replaceTo))
           }
+          hidden.push({ from: node.from, to: replaceTo })
         }
       }
       // Mermaid fenced code block → rendered diagram widget (block).
@@ -1408,6 +1433,7 @@ function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
             ranges.push(
               Decoration.replace({ block: true, widget: new MermaidWidget(code, ctx.dark) }).range(node.from, replaceTo)
             )
+            hidden.push({ from: node.from, to: replaceTo })
           }
         }
       }
@@ -1427,18 +1453,84 @@ function blockDecorationField(state: EditorState, ctx: LpCtx): DecorationSet {
       Decoration.widget({ block: true, widget: new FootnotesSectionWidget(items), side: 1 }).range(doc.length)
     )
   }
-  return Decoration.set(ranges, true)
+  return { decos: Decoration.set(ranges, true), hidden }
 }
 
+/** Block-replaced ranges exposed as a StateField so the arrow-key handler
+ *  below can see which lines are currently hidden behind widgets. */
 function blockDecorations(ctx: LpCtx) {
-  return StateField.define<DecorationSet>({
+  const field = StateField.define<BlockDecorations>({
     create(state) { return blockDecorationField(state, ctx) },
     update(prev, tr) {
       if (tr.docChanged || tr.selection) return blockDecorationField(tr.state, ctx)
       return prev
     },
-    provide: (f) => EditorView.decorations.from(f)
+    provide: (f) => EditorView.decorations.from(f, (v) => v.decos)
   })
+  return [field, blockMotionKeymap(field)]
+}
+
+/** ArrowUp/ArrowDown step INTO hidden block widgets (tables, $$ math, HTML
+ *  and mermaid blocks…) instead of vaulting over them. CodeMirror's vertical
+ *  motion deliberately jumps past non-text blocks — posAtCoords with a scan
+ *  direction skips widget blocks — so a multi-line block replaced by a
+ *  widget was unreachable by arrows: the caret leapt from the line above
+ *  straight past the whole block. Landing on the block's near edge makes its
+ *  lines active, unmounts the widget, and reveals the raw source. */
+function blockMotion(
+  field: StateField<BlockDecorations>,
+  forward: boolean,
+  extend: boolean
+): (view: EditorView) => boolean {
+  return (view) => {
+    const { state } = view
+    // Reading mode keeps the fully rendered surface; skipping widgets is
+    // correct there (no source to reveal).
+    if (state.facet(readingModeFacet)) return false
+    const hidden = state.field(field, false)?.hidden
+    if (!hidden || hidden.length === 0) return false
+
+    let any = false
+    const ranges = state.selection.ranges.map((range) => {
+      // Plain motion collapses a selection first (default cursorByLine);
+      // extend keeps the anchor and moves the head (default extendSel).
+      const start = range.empty || extend
+        ? range
+        : EditorSelection.cursor(forward ? range.to : range.from)
+      const moved = view.moveVertically(start, forward)
+      const lo = Math.min(start.head, moved.head)
+      const hi = Math.max(start.head, moved.head)
+      let clamp = -1
+      for (const h of hidden) {
+        // A hidden block the default motion crossed entirely.
+        if (h.from >= lo && h.to <= hi) {
+          const edge = forward ? h.from : h.to
+          if (clamp < 0 || (forward ? edge < clamp : edge > clamp)) clamp = edge
+        }
+      }
+      if (clamp >= 0) {
+        any = true
+        return extend
+          ? EditorSelection.range(range.anchor, clamp)
+          : EditorSelection.cursor(clamp, forward ? 1 : -1)
+      }
+      return extend ? EditorSelection.range(range.anchor, moved.head) : moved
+    })
+    if (!any) return false
+    view.dispatch({
+      selection: EditorSelection.create(ranges, state.selection.mainIndex),
+      scrollIntoView: true,
+      userEvent: 'select'
+    })
+    return true
+  }
+}
+
+function blockMotionKeymap(field: StateField<BlockDecorations>): Extension {
+  return Prec.highest(keymap.of([
+    { key: 'ArrowDown', run: blockMotion(field, true, false), shift: blockMotion(field, true, true) },
+    { key: 'ArrowUp', run: blockMotion(field, false, false), shift: blockMotion(field, false, true) }
+  ]))
 }
 
 // ---- Plugin ----------------------------------------------------------------
