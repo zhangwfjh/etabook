@@ -213,6 +213,122 @@ export const TESTS = [
       })
     },
     expect: (r) => r.pass
+  },
+  {
+    id: 'slash-menu',
+    description:
+      'Slash menu: opens on empty line with sections + full catalog, keyword filter, callout template insert, heading transforms a text line, code block inserts below, suppressed inside fenced code, off in Source mode',
+    probe: async (tab) => {
+      return await tab.evaluate(async () => {
+        const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms))
+        const view = window.__editorView
+        const type = (pos: number, text: string) =>
+          view.dispatch({
+            changes: { from: pos, insert: text },
+            selection: { anchor: pos + text.length },
+            userEvent: 'input.type'
+          })
+        const clickMode = (label: string) => {
+          const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === label)
+          if (b) b.click()
+        }
+        const tip = () => document.querySelector<HTMLElement>('.cm-tooltip-autocomplete')
+        const labels = () =>
+          tip()
+            ? [...tip()!.querySelectorAll<HTMLElement>('.cm-completionLabel')].map((s) => s.textContent)
+            : []
+        const pick = (label: string) => {
+          const li = [...tip()!.querySelectorAll<HTMLElement>('li')].find(
+            (el) => el.querySelector('.cm-completionLabel')?.textContent === label
+          )
+          li?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+        }
+        const lineEnd = (n: number) => view.state.doc.line(n).to
+        const doc = () => view.state.doc.toString()
+        const doc0 = view.state.doc.toString()
+        const out: Record<string, unknown> = {}
+
+        clickMode('Live')
+        await sleep(400)
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: 'para text\n\n```js\ncode here\n```\n' },
+          selection: { anchor: 0 }
+        })
+        await sleep(200)
+
+        // A: opens on an empty line — sections, full catalog, new entries.
+        type(10, '/')
+        await sleep(350)
+        out.menuOpens = !!tip()
+        out.sections = tip()
+          ? [...tip()!.querySelectorAll('completion-section')].map((s) => s.textContent)
+          : []
+        const all = labels()
+        out.catalog = {
+          count: all.length,
+          hasCallout: all.includes('Callout'),
+          hasMermaid: all.includes('Mermaid diagram'),
+          hasEmbed: all.includes('Note embed'),
+          hasFootnote: all.includes('Footnote')
+        }
+
+        // B: keyword filter ("cal" → Callout only), then insert template in place.
+        type(11, 'cal')
+        await sleep(350)
+        out.filterKeyword = labels().length === 1 && labels()[0] === 'Callout'
+        pick('Callout')
+        await sleep(250)
+        out.calloutInserted = doc().includes('> [!note] Title')
+
+        // C: text block transforms a content line ("para text /h" → "# para text").
+        view.dispatch({ selection: { anchor: lineEnd(1) } })
+        type(lineEnd(1), ' /h')
+        await sleep(350)
+        out.transformMenuOpen = labels().includes('Heading 1')
+        pick('Heading 1')
+        await sleep(250)
+        out.headingTransformed = doc().split('\n')[0] === '# para text'
+
+        // D: container inserts a fresh block below the content line.
+        view.dispatch({ selection: { anchor: lineEnd(1) } })
+        type(lineEnd(1), ' /cod')
+        await sleep(350)
+        pick('Code block')
+        await sleep(250)
+        out.codeBelow = doc().split('\n').slice(0, 3).join('\n') === '# para text\n```js\n'
+
+        // E: suppressed inside a fenced code block.
+        const codePos = doc().indexOf('code here') + 'code here'.length
+        view.dispatch({ selection: { anchor: codePos } })
+        type(codePos, '/')
+        await sleep(350)
+        out.suppressedInCode = !tip()
+
+        // F: off in Source mode.
+        clickMode('Source')
+        await sleep(400)
+        view.dispatch({ selection: { anchor: lineEnd(2) } })
+        type(lineEnd(2), '/')
+        await sleep(350)
+        out.offInSource = !tip()
+        clickMode('Live')
+        await sleep(300)
+        // Restore the original content so autosave doesn't persist probe edits.
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: doc0 },
+          selection: { anchor: 0 }
+        })
+        return out
+      })
+    },
+    expect: (r) =>
+      r.menuOpens &&
+      r.sections.length === 3 &&
+      r.sections[0] === 'Basic blocks' &&
+      r.catalog.count === 20 &&
+      r.catalog.hasCallout && r.catalog.hasMermaid && r.catalog.hasEmbed && r.catalog.hasFootnote &&
+      r.filterKeyword && r.calloutInserted && r.transformMenuOpen && r.headingTransformed &&
+      r.codeBelow && r.suppressedInCode && r.offInSource
   }
 ]
 

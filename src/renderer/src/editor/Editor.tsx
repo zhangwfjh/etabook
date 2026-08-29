@@ -9,7 +9,7 @@ import {
 } from './extensions/core'
 import { editorTheme, themeCompartment } from './extensions/theme'
 import { livePreviewPlugin, setLivePreviewTheme } from './extensions/livePreview'
-import { slashCommands } from './extensions/slash'
+import { slashCommands, slashCompartment } from './extensions/slash'
 
 export type EditorProps = {
   doc: string
@@ -130,7 +130,7 @@ export function Editor(props: EditorProps): React.JSX.Element {
               })
             : []
         ),
-        slashCommands(),
+        slashCompartment.of(props.livePreview && !props.reading ? slashCommands() : []),
         onChangeExt
       ]
     })
@@ -191,7 +191,8 @@ export function Editor(props: EditorProps): React.JSX.Element {
                       : ([] as Extension[])
                   )
                 ]
-              : [])
+              : []),
+            slashCompartment.reconfigure(p.livePreview && !p.reading ? slashCommands() : []),
           ]
         })
         view.setState(restored.state)
@@ -309,18 +310,24 @@ export function Editor(props: EditorProps): React.JSX.Element {
     const view = viewRef.current as AugmentedView | null
     if (!view?._liveCompartment) return
     view.dispatch({
-      effects: view._liveCompartment.reconfigure(
-        props.livePreview
-          ? livePreviewPlugin({
-              docDir: props.docDir,
-              dark: props.dark,
-              reading: props.reading,
-              workspace: props.workspace,
-              docPath: props.docPath,
-              onOpenNote: props.onOpenNote
-            })
-          : ([] as Extension[])
-      )
+      effects: [
+        view._liveCompartment.reconfigure(
+          props.livePreview
+            ? livePreviewPlugin({
+                docDir: props.docDir,
+                dark: props.dark,
+                reading: props.reading,
+                workspace: props.workspace,
+                docPath: props.docPath,
+                onOpenNote: props.onOpenNote
+              })
+            : ([] as Extension[])
+        ),
+        // The slash menu exists only on the Live Preview surface.
+        slashCompartment.reconfigure(
+          props.livePreview && !props.reading ? slashCommands() : []
+        )
+      ]
     })
   }, [props.livePreview, props.docDir, props.reading, props.dark, props.workspace, props.docPath, props.onOpenNote])
 
