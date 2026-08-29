@@ -6,8 +6,7 @@ import {
   BookOpen,
   Command as CommandIcon,
   Sun,
-  Moon,
-  Sidebar as SidebarIcon
+  Moon
 } from 'lucide-react'
 import type { EditorView as EditorViewType } from '@codemirror/view'
 import { api } from '@renderer/lib/ipc'
@@ -24,6 +23,8 @@ import { CommandPalette } from '@renderer/features/commandPalette/CommandPalette
 import { buildCommands } from '@renderer/features/commandPalette/commands'
 import { SettingsModal } from '@renderer/features/settings/SettingsModal'
 import { ShortcutsModal } from '@renderer/features/shortcuts/ShortcutsModal'
+import { ConfirmDialog, PromptDialog } from '@renderer/components/Dialogs'
+import { ToastStack, useToasts } from '@renderer/components/Toast'
 import {
   openFind,
   openReplace,
@@ -39,10 +40,19 @@ import type { MenuAction } from '@shared/types'
 
 export function App(): ReactElement {
   const { state, dispatch } = useStore()
-  const { dark, setTheme } = useTheme()
+  const { dark, setTheme, config, setConfig } = useTheme()
   const activeDoc = useActiveDoc()
   const [cursorPos, setCursorPos] = useState(0)
   const [refreshKey, setRefreshKey] = useState(0)
+  // In-app dialog state (replaces window.prompt/confirm/alert).
+  const [newFilePrompt, setNewFilePrompt] = useState<{ parentDir: string } | null>(null)
+  const [closeConfirm, setCloseConfirm] = useState<{ docId: string; name: string } | null>(null)
+  const { toasts, push, dismiss } = useToasts()
+  // Sidebar width, persisted on drag end (clamped 180–480).
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    Math.min(480, Math.max(180, Math.round(config.sidebarWidth ?? 256)))
+  )
+  const resizeDrag = useRef<{ startX: number; startW: number } | null>(null)
 
   // Keep the active EditorView reachable for toolbar/find commands.
   const setGlobalView = (view: EditorViewType | null): void => {
@@ -92,42 +102,65 @@ export function App(): ReactElement {
     await api().setConfig({ ...cfg, workspace: folder })
   }
 
-  async function createFile(parentDir: string): Promise<void> {
-    const name = window.prompt('New file name', 'untitled.md')
+  async function createFile(parentDir: string, rawName: string): Promise<void> {
+    const name = rawName.trim()
     if (!name) return
     const path = `${parentDir}/${name}`
     try {
       const { content } = await api().createFile(path, '')
       dispatch({ type: 'open-doc', path, content })
       setRefreshKey((k) => k + 1)
-    } catch {
-      window.alert('Could not create file')
+    } catch (err) {
+      const reason = err instanceof Error && err.message ? ` — ${err.message}` : ''
+      push('error', `Could not create ${name}${reason}`)
     }
   }
 
-  async function save(active: Doc | null, saveAs = false): Promise<void> {
-    if (!active) return
+  async function save(active: Doc | null, saveAs = false): Promise<boolean> {
+    if (!active) return false
     let path = active.path
     if (!path || saveAs) {
       path = (await api().pickSavePath(active.name)) ?? undefined
-      if (!path) return
+      if (!path) return false
     }
     dispatch({ type: 'save-status', status: 'saving' })
     try {
       await api().writeFile(path, active.content)
       await api().addRecentFile(path)
       dispatch({ type: 'mark-clean', id: active.id, path })
+      return true
     } catch {
       dispatch({ type: 'save-status', status: 'error' })
+      push('error', `Could not save ${active.name} — check the location and try again.`)
+      return false
     }
   }
 
-  async function closeDocWithConfirm(id: string): Promise<void> {
-     const doc = state.docs.find((d) => d.id === id)
-     if (doc?.dirty && !window.confirm(`Close ${doc.name} without saving?`)) return
+  function closeDoc(id: string): void {
     dropEditorState(id)
-     dispatch({ type: 'close-doc', id })
-   }
+    dispatch({ type: 'close-doc', id })
+  }
+
+  /** Close request: dirty docs go through the themed confirm dialog. */
+  function requestClose(id: string): void {
+    const doc = state.docs.find((d) => d.id === id)
+    if (doc?.dirty) setCloseConfirm({ docId: id, name: doc.name })
+    else closeDoc(id)
+  }
+
+  async function handleCloseConfirm(choice: string | null): Promise<void> {
+    const pending = closeConfirm
+    setCloseConfirm(null)
+    if (!pending || choice === null || choice === 'cancel') return
+    if (choice === 'discard') {
+      closeDoc(pending.docId)
+      return
+    }
+    // 'save': save first; keep the tab open when saving fails (error toasted).
+    const doc = state.docs.find((d) => d.id === pending.docId)
+    if (!doc) return
+    if (await save(doc)) closeDoc(pending.docId)
+  }
 
   function handleMenuAction(action: MenuAction): void {
     const doc = activeDoc
@@ -255,24 +288,57 @@ export function App(): ReactElement {
         docs={state.docs}
         activeId={state.activeId}
         onActivate={(id) => dispatch({ type: 'activate', id })}
-        onClose={(id) => void closeDocWithConfirm(id)}
+        onClose={requestClose}
+        onNew={newDoc}
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Sidebar */}
         {state.sidebarOpen && (
-          <aside className="w-64 border-r border-[var(--border)] bg-[var(--surface)] shrink-0 flex flex-col">
+          <aside
+            className="relative border-r border-[var(--border)] bg-[var(--surface)] shrink-0 flex flex-col"
+            style={{ width: sidebarWidth }}
+          >
             <FileTree
               workspace={state.workspace}
               activePath={activeDoc?.path}
               onOpen={openPath}
               onPickFolder={pickFolder}
-              onCreate={createFile}
+              onCreate={(parentDir) => setNewFilePrompt({ parentDir })}
               refreshKey={refreshKey}
             />
             <div className="border-t border-[var(--border)] max-h-[40%]">
               <Outline doc={activeDoc} onJump={jumpToPos} />
             </div>
+            {/* Drag handle: drag to resize, double-click to reset (256px). */}
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize sidebar"
+              className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize z-10 hover:bg-[var(--accent-soft)]"
+              onPointerDown={(e) => {
+                if (e.button !== 0) return
+                resizeDrag.current = { startX: e.clientX, startW: sidebarWidth }
+                e.currentTarget.setPointerCapture(e.pointerId)
+                document.body.style.userSelect = 'none'
+                document.body.style.cursor = 'col-resize'
+              }}
+              onPointerMove={(e) => {
+                const d = resizeDrag.current
+                if (d) setSidebarWidth(Math.min(480, Math.max(180, Math.round(d.startW + e.clientX - d.startX))))
+              }}
+              onPointerUp={() => {
+                if (!resizeDrag.current) return
+                resizeDrag.current = null
+                document.body.style.userSelect = ''
+                document.body.style.cursor = ''
+                void setConfig({ sidebarWidth })
+              }}
+              onDoubleClick={() => {
+                setSidebarWidth(256)
+                void setConfig({ sidebarWidth: 256 })
+              }}
+            />
           </aside>
         )}
 
@@ -301,9 +367,36 @@ export function App(): ReactElement {
       <CommandPalette open={state.paletteOpen} onClose={() => dispatch({ type: 'palette', open: false })} commands={commands} />
       <SettingsModal open={state.settingsOpen} onClose={() => dispatch({ type: 'settings', open: false })} />
       <ShortcutsModal open={state.shortcutsOpen} onClose={() => dispatch({ type: 'shortcuts', open: false })} />
+
+      <PromptDialog
+        open={newFilePrompt !== null}
+        title="New File"
+        label="File name"
+        initial="untitled.md"
+        onResolve={(name) => {
+          const pending = newFilePrompt
+          setNewFilePrompt(null)
+          if (pending && name) void createFile(pending.parentDir, name)
+        }}
+      />
+      <ConfirmDialog
+        open={closeConfirm !== null}
+        title="Unsaved changes"
+        message={
+          <span>
+            <strong className="text-[var(--text)]">{closeConfirm?.name}</strong> has unsaved changes.
+          </span>
+        }
+        actions={[
+          { label: 'Cancel', value: 'cancel', variant: 'ghost' },
+          { label: 'Discard', value: 'discard', variant: 'danger-solid' },
+          { label: 'Save & Close', value: 'save', variant: 'solid' }
+        ]}
+        onResolve={(choice) => void handleCloseConfirm(choice)}
+      />
+      <ToastStack toasts={toasts} onDismiss={dismiss} />
     </div>
   )
-  void SidebarIcon
 }
 
 function ModeButton({

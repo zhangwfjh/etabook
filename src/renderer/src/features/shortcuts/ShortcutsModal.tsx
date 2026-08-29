@@ -24,7 +24,9 @@ const GROUPS: Group[] = [
       { keys: 'Ctrl/Cmd + I', action: 'Italic' },
       { keys: 'Ctrl/Cmd + E', action: 'Inline code' },
       { keys: 'Ctrl/Cmd + Shift + X', action: 'Strikethrough' },
+      { keys: 'Ctrl/Cmd + Shift + K', action: 'Link' },
       { keys: 'Ctrl/Cmd + F', action: 'Find' },
+      { keys: 'Ctrl/Cmd + H', action: 'Find and replace' },
       { keys: '/', action: 'Slash command menu' }
     ]
   },

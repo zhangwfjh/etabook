@@ -103,6 +103,22 @@ body {
   outline-offset: 2px;
 }
 
+/* Toast entrance: slide up + fade. Zeroed under prefers-reduced-motion. */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.toast-in {
+  animation: toast-in 150ms ease-out;
+}
+
 /* Mermaid appends hidden measuring containers (`<div id="d{renderId}">`) as
    direct children of <body>. Tailwind preflight's `svg { display: block }`
    stretches their inner svg to the full container width, so every label

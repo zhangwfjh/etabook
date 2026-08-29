@@ -5,7 +5,7 @@ import { X } from 'lucide-react'
 // --- Button ------------------------------------------------------------------
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'ghost' | 'outline' | 'solid' | 'danger'
+  variant?: 'ghost' | 'outline' | 'solid' | 'danger' | 'danger-solid'
   size?: 'sm' | 'md' | 'icon'
 }
 
@@ -13,6 +13,7 @@ const variantClasses: Record<NonNullable<ButtonProps['variant']>, string> = {
   ghost: 'hover:bg-[var(--surface-2)] text-[var(--text)]',
   outline: 'border border-[var(--border)] hover:bg-[var(--surface-2)] text-[var(--text)]',
   solid: 'bg-[var(--accent)] text-[var(--accent-contrast)] hover:opacity-90',
+  'danger-solid': 'bg-[var(--danger)] text-white hover:opacity-90',
   danger: 'text-[var(--danger)] hover:bg-[var(--surface-2)]'
 }
 

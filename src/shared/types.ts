@@ -40,6 +40,8 @@ export type AppConfig = {
   editorMode: EditorMode
   lineWrap: boolean
   showLineNumbers: boolean
+  /** Sidebar pixel width, persisted across sessions (clamped 180–480). */
+  sidebarWidth?: number
   workspace?: string
   lastFile?: string
 }
