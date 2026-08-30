@@ -26,6 +26,8 @@ export type MenuAction =
   | { type: 'find-prev' }
   | { type: 'goto-line' }
   | { type: 'toggle-sidebar' }
+  | { type: 'toggle-split' }
+  | { type: 'quick-open' }
   | { type: 'toggle-theme' }
 
 export type ThemeMode = 'light' | 'dark' | 'system'

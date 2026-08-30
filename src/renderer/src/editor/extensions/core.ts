@@ -34,6 +34,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { LANG_ALIASES } from '../../markdown/highlight'
 import { EditorState } from '@codemirror/state'
 import { markdownKeymapExtension } from './markdownKeymap'
+import { tableExtension } from './table'
 
 import { mathExtension } from '../../markdown/math'
 import { obsidianExtension } from '../../markdown/obsidian'
@@ -100,6 +101,7 @@ export function coreExtensions(opts: {
       ...searchKeymap,
       indentWithTab
     ]),
-    markdownKeymapExtension()
+    markdownKeymapExtension(),
+    tableExtension()
   ]
 }

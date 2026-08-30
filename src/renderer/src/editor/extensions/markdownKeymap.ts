@@ -1,3 +1,4 @@
+import { openTableShapePicker } from './table'
 import { type EditorView, type KeyBinding, keymap } from '@codemirror/view'
 import { EditorSelection, type Extension, Prec } from '@codemirror/state'
 
@@ -112,8 +113,10 @@ export const markdownCommands = {
   task: (v: EditorView) => linePrefix(v, '- [ ] '),
   quote: (v: EditorView) => linePrefix(v, '> '),
   codeBlock: (v: EditorView) => insertBlock(v, '```js\n\n```'),
-  table: (v: EditorView) =>
-    insertBlock(v, '| Column A | Column B |\n| --- | --- |\n| cell | cell |'),
+  table: (v: EditorView) => {
+    openTableShapePicker(v)
+    return true
+  },
   hr: (v: EditorView) => insertBlock(v, '---')
 }
 

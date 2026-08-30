@@ -514,3 +514,37 @@
   -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m4%2019%208-8%22%2F%3E%3Cpath%20d%3D%22m12%2019-8-8%22%2F%3E%3Cpath%20d%3D%22M20%2012h-4c0-1.5.442-2%201.5-2.5S20%208.334%2020%207.002c0-.472-.17-.93-.484-1.29a2.105%202.105%200%200%200-2.617-.436c-.42.239-.738.614-.899%201.06%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
   mask: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22currentColor%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m4%2019%208-8%22%2F%3E%3Cpath%20d%3D%22m12%2019-8-8%22%2F%3E%3Cpath%20d%3D%22M20%2012h-4c0-1.5.442-2%201.5-2.5S20%208.334%2020%207.002c0-.472-.17-.93-.484-1.29a2.105%202.105%200%200%200-2.617-.436c-.42.239-.738.614-.899%201.06%22%2F%3E%3C%2Fsvg%3E") center / contain no-repeat;
 }
+
+/* Table shape picker tooltip (slash "Table", toolbar, palette). */
+.lp-table-picker {
+  font-family: var(--font-sans);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.lp-table-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 18px);
+  grid-auto-rows: 14px;
+  gap: 2px;
+}
+.lp-table-picker-cell {
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  cursor: pointer;
+}
+.lp-table-picker-cell.lp-table-picker-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.lp-table-picker-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+  user-select: none;
+}

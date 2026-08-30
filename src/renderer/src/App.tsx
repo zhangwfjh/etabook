@@ -6,18 +6,21 @@ import {
   BookOpen,
   Command as CommandIcon,
   Sun,
-  Moon
+  Moon,
+  Columns2
 } from 'lucide-react'
 import type { EditorView as EditorViewType } from '@codemirror/view'
 import { api } from '@renderer/lib/ipc'
 import { useStore, useActiveDoc, type Doc } from '@renderer/lib/store'
 import { useTheme } from '@renderer/features/settings/ThemeProvider'
-import { Toolbar, getActiveEditorView } from '@renderer/components/Toolbar'
+import { Toolbar } from '@renderer/components/Toolbar'
+import { getActiveEditorView } from '@renderer/lib/activeView'
 import { Tabs } from '@renderer/components/Tabs'
 import { StatusBar } from '@renderer/components/StatusBar'
 import { Button, Tooltip } from '@renderer/components/ui'
 import { FileTree } from '@renderer/features/fileTree/FileTree'
 import { Outline } from '@renderer/features/outline/Outline'
+import { QuickOpen } from '@renderer/features/quickOpen/QuickOpen'
 import { EditorPane } from '@renderer/modes/Views'
 import { CommandPalette } from '@renderer/features/commandPalette/CommandPalette'
 import { buildCommands } from '@renderer/features/commandPalette/commands'
@@ -53,10 +56,24 @@ export function App(): ReactElement {
     Math.min(480, Math.max(180, Math.round(config.sidebarWidth ?? 256)))
   )
   const resizeDrag = useRef<{ startX: number; startW: number } | null>(null)
+  // Split editor: right pane pinned to its own doc; divider drag resizes.
+  const [splitOpen, setSplitOpen] = useState(false)
+  const [rightDocId, setRightDocId] = useState<string | null>(null)
+  const [splitRatio, setSplitRatio] = useState(0.5)
+  const [quickOpen, setQuickOpen] = useState(false)
+  // Synchronous mirror of the focused pane — CM's focusChanged handler must
+  // read it in the same event tick, before React commits the state update.
+  const focusedPaneRef = useRef<'left' | 'right'>('left')
+  const paneViews = useRef<{ left: EditorViewType | null; right: EditorViewType | null }>({ left: null, right: null })
+  const splitDrag = useRef<{ startX: number; startRatio: number } | null>(null)
 
-  // Keep the active EditorView reachable for toolbar/find commands.
-  const setGlobalView = (view: EditorViewType | null): void => {
-    ;(window as unknown as { __editorView?: EditorViewType }).__editorView = view ?? undefined
+  /** Route the global editor-view bridge to the pane that owns focus.
+   * Destroyed panes never leave a stale view behind: each side registers and
+   * unregisters itself, and the bridge resolves focused > left > right. */
+  const setPaneView = (side: 'left' | 'right', view: EditorViewType | null): void => {
+    paneViews.current[side] = view
+    const w = window as unknown as { __editorView?: EditorViewType }
+    w.__editorView = (paneViews.current[focusedPaneRef.current] ?? paneViews.current.left ?? paneViews.current.right) ?? undefined
   }
 
   installEditorApi()
@@ -189,6 +206,12 @@ export function App(): ReactElement {
       case 'toggle-sidebar':
         dispatch({ type: 'set-sidebar', open: !state.sidebarOpen })
         break
+      case 'toggle-split':
+        setSplitOpen((v) => !v)
+        break
+      case 'quick-open':
+        setQuickOpen(true)
+        break
       case 'toggle-theme':
         setTheme(dark ? 'light' : 'dark')
         break
@@ -239,6 +262,8 @@ export function App(): ReactElement {
     onExportMd: () => void exportMarkdown(activeDoc ?? state.docs[0]),
     onExportHtml: () => void exportHtml(activeDoc ?? state.docs[0], dark, state.workspace),
     onExportPdf: () => void exportPdf(activeDoc ?? state.docs[0], dark, state.workspace),
+    onToggleSplit: () => setSplitOpen((v) => !v),
+    onQuickOpen: () => setQuickOpen(true),
   })
 
   // Build a fresh welcome doc name only when needed.
@@ -272,6 +297,16 @@ export function App(): ReactElement {
           <ModeButton active={state.mode === 'live'} onClick={() => dispatch({ type: 'set-mode', mode: 'live' })} icon={<Eye size={14} />} label="Live" />
           <ModeButton active={state.mode === 'reading'} onClick={() => dispatch({ type: 'set-mode', mode: 'reading' })} icon={<BookOpen size={14} />} label="Read" />
         </div>
+        <Tooltip label="Toggle split view (Ctrl+Shift+\)">
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => setSplitOpen((v) => !v)}
+            aria-label="Toggle split view"
+          >
+            <Columns2 size={16} />
+          </Button>
+        </Tooltip>
         <Tooltip label="Command palette (Ctrl+K)">
           <Button size="icon" variant="ghost" onClick={() => dispatch({ type: 'palette', open: true })} aria-label="Command palette">
             <CommandIcon size={16} />
@@ -287,7 +322,15 @@ export function App(): ReactElement {
       <Tabs
         docs={state.docs}
         activeId={state.activeId}
-        onActivate={(id) => dispatch({ type: 'activate', id })}
+        onActivate={(id) => {
+          // While the right pane owns focus, tab clicks re-pin it (VS Code
+          // split behavior); otherwise they switch the active (left) doc.
+          if (splitOpen && focusedPaneRef.current === 'right' && id !== state.activeId) {
+            setRightDocId(id)
+          } else {
+            dispatch({ type: 'activate', id })
+          }
+        }}
         onClose={requestClose}
         onNew={newDoc}
       />
@@ -345,24 +388,72 @@ export function App(): ReactElement {
         {/* Editor area */}
         <main className="flex flex-col flex-1 min-w-0">
           {state.mode !== 'reading' && <Toolbar />}
-          <div className="flex-1 min-h-0 overflow-hidden bg-[var(--bg)]">
-            {activeDoc ? (
-              <EditorPaneBridge
-                doc={activeDoc}
-                mode={state.mode}
-                workspace={state.workspace}
-                onOpenNote={openPath}
-                onChange={(text) => dispatch({ type: 'set-content', id: activeDoc.id, content: text })}
-                onCursorChange={setCursorPos}
-                onReady={setGlobalView}
-              />
-            ) : null}
+          <div className="flex-1 min-h-0 flex overflow-hidden bg-[var(--bg)]">
+            {/* Left pane — the active tab (tab clicks while the right pane is
+                focused re-pin the right pane instead). */}
+            <div
+              className="min-w-0 flex-1 relative"
+              style={splitOpen ? { flex: `0 0 ${Math.round(splitRatio * 100)}%` } : undefined}
+              onFocusCapture={() => { focusedPaneRef.current = 'left' }}
+            >
+              {activeDoc ? (
+                <EditorPaneBridge
+                  doc={activeDoc}
+                  mode={state.mode}
+                  workspace={state.workspace}
+                  onOpenNote={openPath}
+                  onChange={(text) => dispatch({ type: 'set-content', id: activeDoc.id, content: text })}
+                  onCursorChange={setCursorPos}
+                  onReady={(v) => setPaneView('left', v)}
+                />
+              ) : null}
+            </div>
+            {splitOpen && activeDoc && (
+              <>
+                <div
+                  role="separator"
+                  aria-orientation="vertical"
+                  aria-label="Resize split"
+                  className="w-1.5 cursor-col-resize hover:bg-[var(--accent-soft)] shrink-0"
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return
+                    splitDrag.current = { startX: e.clientX, startRatio: splitRatio }
+                    e.currentTarget.setPointerCapture(e.pointerId)
+                  }}
+                  onPointerMove={(e) => {
+                    const d = splitDrag.current
+                    if (!d) return
+                    const host = e.currentTarget.parentElement
+                    if (!host) return
+                    const ratio = d.startRatio + (e.clientX - d.startX) / host.clientWidth
+                    setSplitRatio(Math.min(0.8, Math.max(0.2, ratio)))
+                  }}
+                  onPointerUp={() => { splitDrag.current = null }}
+                  onDoubleClick={() => setSplitRatio(0.5)}
+                />
+                <div className="min-w-0 flex-1 relative" onFocusCapture={() => { focusedPaneRef.current = 'right' }}>
+                  <EditorPaneBridge
+                    doc={state.docs.find((d) => d.id === rightDocId) ?? activeDoc}
+                    mode={state.mode}
+                    workspace={state.workspace}
+                    onOpenNote={openPath}
+                    onChange={(text) => {
+                      const rd = state.docs.find((d) => d.id === rightDocId)
+                      dispatch({ type: 'set-content', id: rd ? rd.id : activeDoc.id, content: text })
+                    }}
+                    onCursorChange={setCursorPos}
+                    onReady={(v) => setPaneView('right', v)}
+                  />
+                </div>
+              </>
+            )}
           </div>
           {activeDoc && (
             <StatusBar doc={activeDoc} cursorPos={cursorPos} mode={state.mode} saveStatus={state.saveStatus} />
           )}
         </main>
       </div>
+      <QuickOpen open={quickOpen} onClose={() => setQuickOpen(false)} workspace={state.workspace} activePath={activeDoc?.path} onOpen={openPath} />
 
       <CommandPalette open={state.paletteOpen} onClose={() => dispatch({ type: 'palette', open: false })} commands={commands} />
       <SettingsModal open={state.settingsOpen} onClose={() => dispatch({ type: 'settings', open: false })} />

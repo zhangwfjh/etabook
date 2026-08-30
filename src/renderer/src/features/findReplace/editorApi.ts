@@ -6,7 +6,7 @@ import {
   getSearchQuery,
   setSearchQuery
 } from '@codemirror/search'
-import { getActiveEditorView } from '@renderer/components/Toolbar'
+import { getActiveEditorView } from '@renderer/lib/activeView'
 
 /**
  * Programmatic editor command surface for the interactive test harness

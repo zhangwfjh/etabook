@@ -36,15 +36,28 @@ const GROUPS: Group[] = [
       { keys: 'Ctrl/Cmd + Alt + 1', action: 'Source mode' },
       { keys: 'Ctrl/Cmd + Alt + 2', action: 'Live Preview mode' },
       { keys: 'Ctrl/Cmd + Alt + 3', action: 'Reading mode' },
-      { keys: 'Ctrl/Cmd + \\', action: 'Toggle sidebar' },
+      { keys: 'Ctrl/Cmd + \\\\', action: 'Toggle sidebar' },
+      { keys: 'Ctrl/Cmd + Shift + \\\\', action: 'Toggle split editor' },
       { keys: 'Ctrl/Cmd + Shift + L', action: 'Toggle theme' }
     ]
   },
   {
     title: 'Go',
     rows: [
+      { keys: 'Ctrl/Cmd + P', action: 'Quick open file' },
       { keys: 'Ctrl/Cmd + K', action: 'Command palette' },
       { keys: 'Tab', action: 'Indent' }
+    ]
+  },
+  {
+    title: 'Table (inside a table)',
+    rows: [
+      { keys: 'Tab / Shift + Tab', action: 'Next / previous cell' },
+      { keys: 'Enter', action: 'Next row (adds a row at the end)' },
+      { keys: 'Alt + Shift + ↑ / ↓', action: 'Insert row above / below' },
+      { keys: 'Alt + Shift + ← / →', action: 'Insert column left / right' },
+      { keys: 'Alt + Shift + Backspace', action: 'Delete row' },
+      { keys: 'Alt + Ctrl + Backspace', action: 'Delete column' }
     ]
   }
 ]

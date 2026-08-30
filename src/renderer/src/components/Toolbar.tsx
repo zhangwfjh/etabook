@@ -20,12 +20,10 @@ import {
 import { type EditorView } from '@codemirror/view'
 import { markdownCommands } from '@renderer/editor/extensions/markdownKeymap'
 import { Button, Tooltip } from '@renderer/components/ui'
+import { getActiveEditorView } from '@renderer/lib/activeView'
 
-// The toolbar holds a ref to the active EditorView so its buttons dispatch
-// formatting commands directly into the editor.
-export function getActiveEditorView(): EditorView | null {
-  return (window as unknown as { __editorView?: EditorView }).__editorView ?? null
-}
+// The toolbar dispatches formatting commands into the active editor view via
+// the shared bridge in lib/activeView.
 
 type Tool = { id: string; label: string; icon: ReactElement; run: () => void }
 
@@ -49,7 +47,7 @@ function buildTools(): Tool[] {
     { id: 'task', label: 'Task list', icon: <ListChecks size={16} />, run: () => call(markdownCommands.task) },
     { id: 'quote', label: 'Quote', icon: <Quote size={16} />, run: () => call(markdownCommands.quote) },
     { id: 'codeblock', label: 'Code block', icon: <Code2 size={16} />, run: () => call(markdownCommands.codeBlock) },
-    { id: 'table', label: 'Table', icon: <Table size={16} />, run: () => call(markdownCommands.table) },
+    { id: 'table', label: 'Table (pick shape)', icon: <Table size={16} />, run: () => call(markdownCommands.table) },
     { id: 'hr', label: 'Horizontal rule', icon: <Minus size={16} />, run: () => call(markdownCommands.hr) }
   ]
 }

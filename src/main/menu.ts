@@ -141,6 +141,11 @@ export async function buildAppMenu(mainWindow: () => BrowserWindow | null): Prom
           click: () => send(win(), { type: 'toggle-sidebar' })
         },
         {
+          label: 'Toggle Split Editor',
+          accelerator: 'CmdOrCtrl+Shift+\\',
+          click: () => send(win(), { type: 'toggle-split' })
+        },
+        {
           label: 'Toggle Theme',
           accelerator: 'CmdOrCtrl+Shift+L',
           click: () => send(win(), { type: 'toggle-theme' })
@@ -159,6 +164,11 @@ export async function buildAppMenu(mainWindow: () => BrowserWindow | null): Prom
     {
       label: 'Go',
       submenu: [
+        {
+          label: 'Quick Open…',
+          accelerator: 'CmdOrCtrl+P',
+          click: () => send(win(), { type: 'quick-open' })
+        },
         {
           label: 'Command Palette',
           accelerator: 'CmdOrCtrl+K',

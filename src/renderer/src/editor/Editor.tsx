@@ -105,6 +105,10 @@ export function Editor(props: EditorProps): React.JSX.Element {
       if (update.selectionSet && propsRef.current.onCursorChange) {
         propsRef.current.onCursorChange(update.state.selection.main.head)
       }
+      // Split panes: route the view bridge to whichever pane owns focus.
+      if (update.focusChanged && update.view.hasFocus) {
+        propsRef.current.onView?.(update.view)
+      }
     })
 
     const liveCompartment = new Compartment()

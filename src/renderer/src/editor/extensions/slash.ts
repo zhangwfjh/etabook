@@ -9,6 +9,7 @@ import {
 } from '@codemirror/autocomplete'
 import { syntaxTree } from '@codemirror/language'
 import type { EditorView } from '@codemirror/view'
+import { openTableShapePicker } from './table'
 
 /**
  * Slash Menu — the "/" block-insert menu on the Live Preview surface.
@@ -59,6 +60,8 @@ type ContainerBlock = {
   template: string
   /** [anchor, head] offsets into `template`; default: after the block. */
   cursor?: [number, number]
+  /** Open the table shape picker instead of inserting a template. */
+  picker?: 'table'
   /** Footnote definition — number computed from the doc at apply time. */
   footnote?: boolean
 }
@@ -85,7 +88,7 @@ const BLOCKS: BlockSpec[] = [
   { kind: 'container', label: 'Link', detail: 'Hyperlink', icon: 'slash-link', section: MEDIA, keywords: 'url hyperlink', template: '[text](https://)\n', cursor: [1, 5] },
   { kind: 'container', label: 'Note embed', detail: 'Embed another note', icon: 'slash-embed', section: MEDIA, keywords: 'embed include transclude', template: '![[Note]]\n', cursor: [3, 7] },
   // --- Advanced -----------------------------------------------------------
-  { kind: 'container', label: 'Table', detail: 'GFM table', icon: 'slash-table', section: ADVANCED, keywords: 'grid gfm columns', template: '| Column A | Column B |\n| --- | --- |\n| cell | cell |\n' },
+  { kind: 'container', label: 'Table', detail: 'GFM table — pick a shape', icon: 'slash-table', section: ADVANCED, keywords: 'grid gfm columns rows', template: '| Column A | Column B |\n| --- | --- |\n| cell | cell |\n', picker: 'table' },
   { kind: 'container', label: 'Math block', detail: 'KaTeX display math', icon: 'slash-math', section: ADVANCED, keywords: 'latex katex formula equation', template: '$$\n\\boxed{x}\n$$\n', cursor: [3, 12] },
   { kind: 'container', label: 'Mermaid diagram', detail: 'Flowchart / graph', icon: 'slash-mermaid', section: ADVANCED, keywords: 'diagram flowchart graph chart', template: '```mermaid\ngraph TD;\n  A --> B;\n```\n', cursor: [11, 20] },
   { kind: 'container', label: 'Footnote', detail: 'Footnote definition', icon: 'slash-fn', section: ADVANCED, keywords: 'citation reference fn', template: '', footnote: true }
@@ -142,6 +145,18 @@ function applyBlock(view: EditorView, spec: BlockSpec, from: number, to: number)
   const before = line.text.slice(0, cutFrom - line.from)
   const after = line.text.slice(to - line.from)
   const hasContent = before.trim() !== '' || after.trim() !== ''
+
+  // Table — remove the query, then open the shape picker at the cursor
+  // (picker inserts on the empty line / below a content line).
+  if (spec.kind === 'container' && spec.picker === 'table') {
+    view.dispatch({
+      changes: { from: cutFrom, to },
+      selection: EditorSelection.cursor(hasContent ? line.to : cutFrom),
+      scrollIntoView: true
+    })
+    openTableShapePicker(view)
+    return
+  }
 
   // Empty line — the template replaces the query in place.
   if (!hasContent) {
