@@ -9,7 +9,7 @@ import {
   Moon,
   Columns2
 } from 'lucide-react'
-import type { EditorView as EditorViewType } from '@codemirror/view'
+import { EditorView as EditorViewType } from '@codemirror/view'
 import { api } from '@renderer/lib/ipc'
 import { useStore, useActiveDoc, type Doc } from '@renderer/lib/store'
 import { useTheme } from '@renderer/features/settings/ThemeProvider'
@@ -35,10 +35,12 @@ import {
   findPrevMatch,
   promptGotoLine
 } from '@renderer/features/findReplace/findReplace'
-import { dropEditorState } from '@renderer/editor/Editor'
+import { dropEditorState, pruneEditorStates, markExternalScroll } from '@renderer/editor/Editor'
 import { installEditorApi } from '@renderer/features/findReplace/editorApi'
 import { exportMarkdown, exportHtml, exportPdf } from '@renderer/features/export/export'
 import type { MenuAction } from '@shared/types'
+import { headingOffset } from '@renderer/markdown/resolve'
+import { normPath } from '@renderer/lib/fs'
 
 export function App(): ReactElement {
   const { state, dispatch } = useStore()
@@ -60,6 +62,9 @@ export function App(): ReactElement {
   const [rightDocId, setRightDocId] = useState<string | null>(null)
   const [splitRatio, setSplitRatio] = useState(0.5)
   const [quickOpen, setQuickOpen] = useState(false)
+  // Pending `[[note#subpath]]` navigation: set when a wikilink opens a note
+  // with a subpath; the effect below scrolls once the note's editor settles.
+  const [pendingScroll, setPendingScroll] = useState<{ path: string; subpath: string } | null>(null)
   // Synchronous mirror of the focused pane — CM's focusChanged handler must
   // read it in the same event tick, before React commits the state update.
   const focusedPaneRef = useRef<'left' | 'right'>('left')
@@ -82,12 +87,85 @@ export function App(): ReactElement {
   ;(window as unknown as { __storeDispatch?: typeof dispatch }).__storeDispatch = dispatch
   ;(window as unknown as { __storeGetState?: () => typeof state }).__storeGetState = () => state
 
-  const openPath = useCallback((path: string): void => {
+  const openPath = useCallback((path: string, subpath?: string, persistent?: boolean): void => {
     api()
       .readFile(path)
-      .then(({ content }) => dispatch({ type: 'open-doc', path, content }))
+      .then(({ content }) => {
+        dispatch({ type: 'open-doc', path, content, persistent })
+        if (subpath) setPendingScroll({ path, subpath })
+      })
       .catch(() => {})
   }, [])
+
+  // Wikilink `[[note#heading]]` / `[[note#^block-id]]`: scroll the opened
+  // note to its target. Fires once the target doc is active — the left pane
+  // always renders the active tab. The 250ms delay deliberately sits after
+  // the editor's tab-switch scroll restore (next rAF) and before the
+  // reading-mode measure sweep snapshots its restore point (350ms), so the
+  // heading position becomes the position that sweep returns to.
+  useEffect(() => {
+    if (!pendingScroll) return
+    const doc = state.docs.find((d) => d.path && normPath(d.path) === normPath(pendingScroll.path))
+    const view = paneViews.current.left
+    if (!doc || state.activeId !== doc.id || !view) return
+    const timers: number[] = []
+    timers.push(
+      window.setTimeout(() => {
+        const off = headingOffset(view.state.doc.toString(), pendingScroll.subpath)
+        markExternalScroll()
+        if (off < 0) {
+          setPendingScroll(null)
+          return
+        }
+        const jump = (): void => {
+          view.dispatch({
+            selection: { anchor: off },
+            effects: EditorViewType.scrollIntoView(off, { y: 'start' })
+          })
+        }
+        jump()
+        // Widget/line heights settle asynchronously after the jump; the
+        // estimate-based landing can sit a few lines off. Re-apply once
+        // after the heights are real so the heading truly pins to the top.
+        timers.push(
+          window.setTimeout(() => {
+            jump()
+            setPendingScroll(null)
+          }, 450)
+        )
+      }, 250)
+    )
+    return () => {
+      for (const t of timers) window.clearTimeout(t)
+    }
+  }, [pendingScroll, state.docs, state.activeId])
+
+  // Preview-tab replacement swaps a tab's doc identity (new id) in place.
+  // Drop stashed editor state for ids that are no longer open (covers
+  // replacement, which removes an id without a tab close).
+  useEffect(() => {
+    pruneEditorStates(new Set(state.docs.map((d) => d.id)))
+  }, [state.docs])
+
+  // If the right split pane was pinned to a replaced preview tab, rebind it
+  // to the successor at the same index (same tab, new file) so the pane
+  // doesn't fall back to duplicating the active doc. A vanished id with a
+  // shrunken list is a real close → null → fallback to the active doc.
+  const prevDocsRef = useRef(state.docs)
+  useEffect(() => {
+    const prev = prevDocsRef.current
+    prevDocsRef.current = state.docs
+    if (!rightDocId || state.docs.some((d) => d.id === rightDocId)) return
+    if (state.docs.length === prev.length) {
+      const idx = prev.findIndex((d) => d.id === rightDocId)
+      const successor = idx >= 0 ? state.docs[idx] : undefined
+      if (successor) {
+        setRightDocId(successor.id)
+        return
+      }
+    }
+    setRightDocId(null)
+  }, [state.docs, rightDocId])
 
   useEffect(() => {
     const offMenu = api().onMenuAction((action: MenuAction) => handleMenuAction(action))
@@ -326,6 +404,7 @@ export function App(): ReactElement {
         }}
         onClose={requestClose}
         onNew={newDoc}
+        onPin={(id) => dispatch({ type: 'pin-doc', id })}
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -338,7 +417,7 @@ export function App(): ReactElement {
             <FileTree
               workspace={state.workspace}
               activePath={activeDoc?.path}
-              onOpen={openPath}
+              onOpen={(path, persistent) => openPath(path, undefined, persistent)}
               onPickFolder={pickFolder}
               onCreate={(parentDir) => setNewFilePrompt({ parentDir })}
               refreshKey={refreshKey}

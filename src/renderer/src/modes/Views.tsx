@@ -14,8 +14,9 @@ type Props = {
   reading: boolean
   /** Absolute workspace root — enables embed/wikilink Resolution. */
   workspace?: string
-  /** Reading-mode navigation: open a resolved note path. */
-  onOpenNote?: (path: string) => void
+  /** Reading-mode navigation: open a resolved note path (+ optional
+   * subpath to scroll to). */
+  onOpenNote?: (path: string, subpath?: string) => void
 }
 
 export function EditorPane({

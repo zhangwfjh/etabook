@@ -34,6 +34,13 @@ export function dirname(path: string): string {
   return idx === -1 ? '' : path.slice(0, idx)
 }
 
+/** Canonical comparison form of a path. Windows `path.join` (file tree,
+ * dialogs) yields `\` while the workspace resolver yields `/` — every
+ * cross-source path comparison must go through this, not `===`. */
+export function normPath(path: string): string {
+  return path.replace(/\\/g, '/')
+}
+
 export function extname(path: string): string {
   const base = basename(path)
   const dot = base.lastIndexOf('.')

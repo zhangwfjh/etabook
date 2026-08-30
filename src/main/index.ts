@@ -8,6 +8,14 @@ import { buildAppMenu } from './menu'
 const currentDir = dirname(fileURLToPath(import.meta.url))
 const isDev = !app.isPackaged
 
+// Separate userData dir when requested (ETABOOK_USER_DATA=<dir>): lets a
+// dev instance run beside an installed/other copy — the single-instance
+// lock and stored config/recent files are per userData, so without this a
+// second copy silently quits (requestSingleInstanceLock below).
+if (process.env['ETABOOK_USER_DATA']) {
+  app.setPath('userData', process.env['ETABOOK_USER_DATA'])
+}
+
 // Local-file image protocol. The renderer (http origin in dev, file:// in
 // production) cannot load file:// subresources — Chromium blocks cross-origin
 // file access. This streams local images regardless of origin; the renderer's

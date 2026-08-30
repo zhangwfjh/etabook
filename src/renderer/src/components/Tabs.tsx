@@ -9,9 +9,10 @@ type Props = {
   onActivate: (id: string) => void
   onClose: (id: string) => void
   onNew: () => void
+  onPin: (id: string) => void
 }
 
-export function Tabs({ docs, activeId, onActivate, onClose, onNew }: Props): ReactElement {
+export function Tabs({ docs, activeId, onActivate, onClose, onNew, onPin }: Props): ReactElement {
   const stripRef = useRef<HTMLDivElement>(null)
 
   // Wheel over the strip scrolls it horizontally (vertical wheel, common in
@@ -41,6 +42,7 @@ export function Tabs({ docs, activeId, onActivate, onClose, onNew }: Props): Rea
                 active ? 'bg-[var(--bg)] text-[var(--text)]' : 'text-[var(--text-muted)] hover:bg-[var(--surface-2)]'
               }`}
               onClick={() => onActivate(doc.id)}
+              onDoubleClick={() => onPin(doc.id)}
               onAuxClick={(e) => {
                 // Middle-click closes the tab (standard editor behavior).
                 if (e.button === 1) {
@@ -51,7 +53,7 @@ export function Tabs({ docs, activeId, onActivate, onClose, onNew }: Props): Rea
               title={doc.path ?? doc.name}
             >
               {doc.dirty && <span className="w-1.5 h-1.5 rounded-full bg-[var(--accent)] shrink-0" />}
-              <span className="truncate max-w-[160px]">{doc.name}</span>
+              <span className={`truncate max-w-[160px] ${doc.preview ? 'italic pr-0.5' : ''}`}>{doc.name}</span>
               <Button
                 size="icon"
                 variant="ghost"

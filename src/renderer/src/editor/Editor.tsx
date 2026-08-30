@@ -26,14 +26,30 @@ export type EditorProps = {
   docDir?: string
   /** Absolute workspace root — enables embed/wikilink Resolution. */
   workspace?: string
-  /** Reading-mode navigation: open a resolved note path. */
-  onOpenNote?: (path: string) => void
+  /** Reading-mode navigation: open a resolved note path (+ optional
+   * subpath to scroll to). */
+  onOpenNote?: (path: string, subpath?: string) => void
   /** Absolute path of this document (embed cycle guard). */
   docPath?: string
   onChange: (text: string) => void
 }
 
 type AugmentedView = EditorView & { _liveCompartment?: Compartment }
+
+/** Toggle for CM's print-path full-document measure window (`printing`
+ * widens the measured viewport to the entire document without scrolling).
+ * `viewState` is private in CM's typings; validated at runtime so a CM
+ * update that reshapes it returns null → caller falls back to the sweep. */
+type PrintingState = { printing: boolean }
+function printingStateOf(view: EditorView): PrintingState | null {
+  const internals: unknown = view
+  if (typeof internals !== 'object' || internals === null || !('viewState' in internals)) return null
+  const vs: unknown = internals.viewState
+  if (typeof vs !== 'object' || vs === null) return null
+  const flag: unknown = 'printing' in vs ? vs.printing : undefined
+  if (typeof flag !== 'boolean') return null
+  return vs as PrintingState // shape validated above
+}
 
 /** Pin the scroller's total height in reading mode: CM re-estimates unmounted
  *  regions as the user scrolls (async widget estimates are approximate), which
@@ -45,8 +61,33 @@ const pinnedViews = new WeakMap<EditorView, { spacer: HTMLElement; ro: ResizeObs
 
 /** Per-tab editor state: undo history, selection, and scroll survive tab
  *  switches; closing a tab drops its entry. Keyed by store Doc.id. */
-type StashedTab = { state: EditorState; scrollTop: number }
+type StashedTab = { state: EditorState; scrollTop: number; anchorLine?: number; anchorOffsetPx?: number }
+
+/** The doc line at the viewport top (+ px offset into it). Scroll positions
+ * in px are meaningless across estimate↔real height transitions — setState
+ * rebuilds the heightmap from estimates, the measure window re-measures —
+ * so visible-position bookkeeping anchors to CONTENT instead. */
+function viewportAnchor(view: EditorView): { line: number; offsetPx: number } | null {
+  const rect = view.scrollDOM.getBoundingClientRect()
+  const pos = view.posAtCoords({ x: rect.left + 24, y: rect.top + 1 })
+  if (pos == null) return null
+  const ln = view.state.doc.lineAt(pos)
+  return { line: ln.number, offsetPx: view.scrollDOM.scrollTop - view.lineBlockAt(ln.from).top }
+}
 const stashedTabs = new Map<string, StashedTab>()
+
+/** The anchor the reading-mode measure window should pin while heights
+ * settle — set by the tab-switch restore (the INTENDED position), consumed
+ * by the measure effect on the same commit. Null when no anchor restore
+ * ran (first show, non-reading modes). */
+let pendingWindowAnchor: { line: number; offsetPx: number } | null = null
+
+/** Tell the editor an app-level scroll (e.g. wikilink heading jump) owns
+ * the position: the reading-mode measure window must not re-pin it. */
+export function markExternalScroll(): void {
+  pendingWindowAnchor = null
+}
+
 /** Doc ids closed while their state could still be stashed by the switch
  *  effect (close re-activates a neighbor, which triggers the stash path). */
 const closedTabs = new Set<string>()
@@ -55,6 +96,15 @@ const closedTabs = new Set<string>()
 export function dropEditorState(docId: string): void {
   stashedTabs.delete(docId)
   closedTabs.add(docId)
+}
+
+/** Drop stashed editor state for every doc id not in the live set. Covers
+ * tab close (redundant with dropEditorState, harmless) and preview-tab
+ * replacement, which removes a doc id without a tab-close event. */
+export function pruneEditorStates(liveIds: Set<string>): void {
+  for (const id of stashedTabs.keys()) {
+    if (!liveIds.has(id)) stashedTabs.delete(id)
+  }
 }
 
 function pinDocHeight(view: EditorView, scroller: HTMLElement): void {
@@ -94,11 +144,15 @@ export function Editor(props: EditorProps): React.JSX.Element {
   const prevDocIdRef = useRef(props.docId)
   // Latest props for event handlers without recreating the view.
   const propsRef = useRef(props)
-  propsRef.current = props
 
-  useLayoutEffect(() => {
-    if (!hostRef.current) return
-    const onChangeExt = EditorView.updateListener.of((update) => {
+  // Stable across renders: the live-preview compartment (identity matters —
+  // the view carries it) and the update listener (reads latest props via
+  // propsRef, so it never needs recreating).
+  const liveCompartmentRef = useRef<Compartment | null>(null)
+  if (!liveCompartmentRef.current) liveCompartmentRef.current = new Compartment()
+  const updateListenerRef = useRef<Extension | null>(null)
+  if (!updateListenerRef.current) {
+    updateListenerRef.current = EditorView.updateListener.of((update) => {
       if (update.docChanged) {
         propsRef.current.onChange(update.state.doc.toString())
       }
@@ -110,37 +164,45 @@ export function Editor(props: EditorProps): React.JSX.Element {
         propsRef.current.onView?.(update.view)
       }
     })
+  }
 
-    const liveCompartment = new Compartment()
-
-    const state = EditorState.create({
-      doc: props.doc,
+  /** A fresh EditorState for the given text, built with the CURRENT props
+   * (theme, wrap, live-preview config). Used at mount and whenever a doc id
+   * is shown for the first time — a fresh state is the only way to start
+   * with empty undo history. */
+  const makeState = (docText: string): EditorState => {
+    const p = propsRef.current
+    return EditorState.create({
+      doc: docText,
       extensions: [
         ...coreExtensions({
-          lineWrap: props.lineWrap,
-          showLineNumbers: props.showLineNumbers,
-          readonly: props.readonly
+          lineWrap: p.lineWrap,
+          showLineNumbers: p.showLineNumbers,
+          readonly: p.readonly
         }),
-        themeCompartment.of(editorTheme(props.dark)),
-        liveCompartment.of(
-          props.livePreview
+        themeCompartment.of(editorTheme(p.dark)),
+        liveCompartmentRef.current!.of(
+          p.livePreview
             ? livePreviewPlugin({
-                docDir: props.docDir,
-                dark: props.dark,
-                reading: props.reading,
-                workspace: props.workspace,
-                docPath: props.docPath,
-                onOpenNote: props.onOpenNote
+                docDir: p.docDir,
+                dark: p.dark,
+                reading: p.reading,
+                workspace: p.workspace,
+                docPath: p.docPath,
+                onOpenNote: p.onOpenNote
               })
             : []
         ),
-        slashCompartment.of(props.livePreview && !props.reading ? slashCommands() : []),
-        onChangeExt
+        slashCompartment.of(p.livePreview && !p.readonly ? slashCommands() : []),
+        updateListenerRef.current!
       ]
     })
-
-    const view = new EditorView({ state, parent: hostRef.current }) as AugmentedView
-    view._liveCompartment = liveCompartment
+  }
+  propsRef.current = props
+  useLayoutEffect(() => {
+    if (!hostRef.current) return
+    const view = new EditorView({ state: makeState(props.doc), parent: hostRef.current }) as AugmentedView
+    view._liveCompartment = liveCompartmentRef.current!
     viewRef.current = view
     propsRef.current.onView?.(view)
 
@@ -154,9 +216,9 @@ export function Editor(props: EditorProps): React.JSX.Element {
 
   // Tab switch: stash the outgoing tab's full editor state (undo history,
   // selection, scroll) and restore the incoming tab's, so undo never bleeds
-  // across documents. Falls through to an in-place text replacement when
-  // there is no stash (tab first shown) or the stash is stale (content was
-  // changed externally for the same doc id).
+  // across documents. A doc id with no stash gets a fresh state (empty
+  // history); an external content change for the SAME id is applied as an
+  // in-place text replacement.
   useEffect(() => {
     const view = viewRef.current
     if (!view) return
@@ -164,7 +226,13 @@ export function Editor(props: EditorProps): React.JSX.Element {
     if (prevId !== props.docId) {
       prevDocIdRef.current = props.docId
       if (!closedTabs.delete(prevId)) {
-        stashedTabs.set(prevId, { state: view.state, scrollTop: view.scrollDOM.scrollTop })
+        const anchor = viewportAnchor(view)
+        stashedTabs.set(prevId, {
+          state: view.state,
+          scrollTop: view.scrollDOM.scrollTop,
+          anchorLine: anchor?.line,
+          anchorOffsetPx: anchor?.offsetPx
+        })
       }
       const stashed = stashedTabs.get(props.docId)
       if (stashed && stashed.state.doc.toString() === props.doc) {
@@ -203,17 +271,66 @@ export function Editor(props: EditorProps): React.JSX.Element {
         p.onCursorChange?.(restored.state.selection.main.head)
         view.requestMeasure()
         requestAnimationFrame(() => {
-          if (viewRef.current === view) view.scrollDOM.scrollTop = stashed.scrollTop
+          if (viewRef.current !== view) return
+          // Land on the stashed CONTENT anchor. The fresh heightmap holds
+          // estimates, so a heightmap-derived pixel lands a few lines off;
+          // a second frame refines against the real mounted line (on-screen
+          // by then), and the reading-mode measure window below keeps
+          // pinning the intended anchor as heights turn real.
+          if (stashed.anchorLine !== undefined && stashed.anchorLine <= view.state.doc.lines) {
+            const line = view.state.doc.line(stashed.anchorLine)
+            const offsetPx = stashed.anchorOffsetPx ?? 0
+            view.scrollDOM.scrollTop = view.lineBlockAt(line.from).top + offsetPx
+            pendingWindowAnchor = { line: line.number, offsetPx }
+            // A user scroll between now and the measure window owns the
+            // position — clear the intent so the window pins theirs.
+            view.scrollDOM.addEventListener(
+              'wheel',
+              () => { pendingWindowAnchor = null },
+              { once: true, passive: true }
+            )
+            view.scrollDOM.addEventListener(
+              'touchstart',
+              () => { pendingWindowAnchor = null },
+              { once: true, passive: true }
+            )
+            requestAnimationFrame(() => {
+              if (viewRef.current !== view) return
+              const visible = view.visibleRanges.some((r) => line.from >= r.from && line.from <= r.to)
+              if (!visible) return
+              const domAt = view.domAtPos(line.from)
+              const host = domAt.node.nodeType === 1 ? (domAt.node as HTMLElement) : domAt.node.parentElement
+              const lineEl = host?.closest('.cm-line')
+              if (lineEl instanceof HTMLElement) {
+                const scRect = view.scrollDOM.getBoundingClientRect()
+                const realTop =
+                  lineEl.getBoundingClientRect().top - scRect.top + view.scrollDOM.scrollTop
+                view.scrollDOM.scrollTop = realTop + offsetPx
+              }
+            })
+          } else {
+            pendingWindowAnchor = null
+            view.scrollDOM.scrollTop = stashed.scrollTop
+          }
         })
         return
       }
-      // No usable stash: this tab is being shown for the first time (or its
-      // stash went stale). The scroller still sits where the outgoing tab
-      // left it, and the text replacement below preserves that position —
-      // start the tab at the top instead.
+      // No usable stash: this doc id is shown for the first time (or its
+      // stash went stale — e.g. a preview tab replaced in place). Install a
+      // FRESH state: a text-replace transaction would inherit the previous
+      // document's undo history, and Ctrl+Z would resurrect its content
+      // into this tab.
+      view.setState(makeState(props.doc))
+      propsRef.current.onCursorChange?.(0)
+      view.requestMeasure()
+      pendingWindowAnchor = null
+      // A fresh open starts at the TOP: setState does not reset the
+      // scroller's scroll position, so zero it before the next paint
+      // (rAF runs pre-paint — no intermediate frame at the old pixel).
       requestAnimationFrame(() => {
         if (viewRef.current === view) view.scrollDOM.scrollTop = 0
       })
+      return
     }
     // External doc change for the same doc id — replace only if it differs.
     if (view.state.doc.toString() === props.doc) return
@@ -225,18 +342,24 @@ export function Editor(props: EditorProps): React.JSX.Element {
 
   // Reading mode: pre-measure the whole document once after doc/mode changes.
   // CodeMirror only measures lines/widgets inside the viewport and estimates
-  // the rest at default line height; block widgets (images, tables, embeds,
-  // footnotes) differ, so the doc height — and with it the scrollbar thumb —
-  // jumps the first time the user scrolls them into view. A single fast
-  // top-to-bottom sweep mounts and measures every widget; CM then caches the
-  // real heights and scrolling is stable.
+  // the rest (block widgets — images, tables, embeds, footnotes — estimate
+  // badly), so the doc height, and with it the scrollbar thumb, would jump
+  // the first time the user scrolls an unmeasured region into view.
+  //
+  // Measurement happens WITHOUT scrolling: CM's print path widens the
+  // measured viewport to the entire document (`viewState.printing`), so
+  // every line/widget mounts and measures in place while the scroll
+  // position — what the user sees — never moves. (The previous approach
+  // swept scrollTop top-to-bottom and back, which visibly raced the
+  // scrollbar on every tab switch.) `viewState` is CM-internal: if it ever
+  // disappears, fall back to the scroll sweep rather than lose measurement.
   useEffect(() => {
     const view = viewRef.current
     if (!view || !props.reading) return
     let cancelled = false
-    const timers = new Set<ReturnType<typeof setTimeout>>()
+    const timers = new Set<number>()
     const later = (fn: () => void, ms: number): void => {
-      const t = setTimeout(() => { timers.delete(t); if (!cancelled) fn() }, ms)
+      const t = window.setTimeout(() => { timers.delete(t); if (!cancelled) fn() }, ms)
       timers.add(t)
     }
     const waitImages = (then: () => void, tries: number): void => {
@@ -245,16 +368,68 @@ export function Editor(props: EditorProps): React.JSX.Element {
       if (imgs.length === 0 || tries <= 0) { then(); return }
       later(() => waitImages(then, tries - 1), 100)
     }
-    const timer = setTimeout(() => {
+    const timer = window.setTimeout(() => {
       const scroller = view.dom.querySelector<HTMLElement>('.cm-scroller')
       if (!scroller) return
+      if (scroller.scrollHeight <= scroller.clientHeight * 2) return // nothing virtualized away
+      // One-shot full mount — skip pathological docs (DOM cost).
+      if (view.state.doc.lines > 3000) return
+      // Engage the height pin around the window: async content (embeds via
+      // IPC, images) grows the document in steps; the pin's ratchet absorbs
+      // the oscillation so the scrollbar doesn't jiggle.
+      pinDocHeight(view, scroller)
+      const vs = printingStateOf(view)
+      if (vs) {
+        // Pin the viewport-top line while heights settle: mounting the full
+        // document grows content ABOVE the viewport (estimate → real), which
+        // would otherwise slide the view down. Re-pinning each frame holds
+        // the anchor line at the viewport top through the whole window.
+        // Anchor: the INTENDED restore position when set (the landing is
+        // estimate-based until this window measures; pinning the intended
+        // line converges it to exact). Cleared on user wheel/touch or an
+        // app-level scroll (markExternalScroll) — those own the position.
+        const anchor = pendingWindowAnchor ?? viewportAnchor(view)
+        pendingWindowAnchor = null
+        let pinRaf = 0
+        let pinning = true
+        const stopPin = (): void => {
+          pinning = false
+          cancelAnimationFrame(pinRaf)
+        }
+        // User input wins: stop pinning if the user scrolls mid-window.
+        scroller.addEventListener('wheel', stopPin, { once: true, passive: true })
+        scroller.addEventListener('touchstart', stopPin, { once: true, passive: true })
+        const pin = (): void => {
+          if (!pinning || cancelled) return
+          if (anchor && anchor.line <= view.state.doc.lines) {
+            const blk = view.lineBlockAt(view.state.doc.line(anchor.line).from)
+            view.scrollDOM.scrollTop = blk.top + anchor.offsetPx
+          }
+          pinRaf = requestAnimationFrame(pin)
+        }
+        pin()
+        vs.printing = true
+        view.requestMeasure()
+        const release = (): void => {
+          // Dwell so async content settles and CM records the real heights
+          // before the extra regions unmount; one extra beat of pinning
+          // covers the unmount re-measure, then hands control back.
+          waitImages(() => {
+            view.requestMeasure()
+            later(() => {
+              vs.printing = false
+              view.requestMeasure()
+              later(stopPin, 100)
+            }, 200)
+          }, 5)
+        }
+        release()
+        return
+      }
+      // Fallback: the old top-to-bottom scroll sweep (visible scrollbar
+      // race, but keeps heights measured if CM internals change shape).
       const restore = scroller.scrollTop
       const step = Math.max(200, scroller.clientHeight - 40)
-      if (scroller.scrollHeight <= scroller.clientHeight * 2) return // nothing virtualized away
-      // Engage the height pin BEFORE the sweep: its ratchet then learns the
-      // true maximum while every region scrolls through, and the pad absorbs
-      // the estimate oscillation afterwards.
-      pinDocHeight(view, scroller)
       let y = 0
       let guard = 0
       const sweep = (): void => {
@@ -281,8 +456,12 @@ export function Editor(props: EditorProps): React.JSX.Element {
     }, 350)
     return () => {
       cancelled = true
-      clearTimeout(timer)
-      for (const t of timers) clearTimeout(t)
+      window.clearTimeout(timer)
+      for (const t of timers) window.clearTimeout(t)
+      // If a doc/mode change interrupts the measure window, snap the
+      // printing flag back off (plain object — safe on a destroyed view).
+      const vs = printingStateOf(view)
+      if (vs) vs.printing = false
       unpinDocHeight(view)
     }
   }, [props.reading, props.docId, props.doc])

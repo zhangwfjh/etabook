@@ -28,6 +28,7 @@ import {
 import {
   collectLinkDefs, resolveTargetPath, readNote, fileUrl, extractEmbedContent, headingOffset
 } from '../../markdown/resolve'
+import { normPath } from '../../lib/fs'
 
 /**
  * When true, the decoration engine treats ALL lines as inactive — markup is
@@ -46,8 +47,10 @@ interface LpCtx {
   workspace?: string
   /** Absolute path of the current document (embed cycle guard). */
   docPath?: string
-  /** Reading-mode navigation: open a wikilink target note. */
-  onOpenNote?: (target: string) => void
+  /** Reading-mode navigation: open a wikilink target note. The subpath
+   * (`Section`, `Parent#Sub`, `^block-id`) is present when the link carries
+   * one — the receiver scrolls the opened note to it. */
+  onOpenNote?: (path: string, subpath?: string) => void
 }
 
 
@@ -428,9 +431,8 @@ class EmbedNoteWidget extends WidgetType {
           div.textContent = `📄 ${this.target}`
           return
         }
-        const norm = (s: string): string => s.replace(/\\/g, '/')
-        const chain = this.ctx.docPath ? [norm(this.ctx.docPath)] : []
-        if (chain.includes(norm(p))) {
+        const chain = this.ctx.docPath ? [normPath(this.ctx.docPath)] : []
+        if (chain.includes(normPath(p))) {
           div.className = 'lp-embed-note lp-embed-placeholder'
           div.textContent = `Circular embed: ${this.target}`
           return
@@ -447,7 +449,7 @@ class EmbedNoteWidget extends WidgetType {
           workspace: this.ctx.workspace,
           docDir: this.ctx.docDir,
           depth: 1,
-          chain: [...chain, norm(p)],
+          chain: [...chain, normPath(p)],
           inApp: true
         })
         embedHtmlMemo.set(key, html)
@@ -1584,13 +1586,14 @@ function readingClickHandler(ctx: LpCtx): Extension {
             return true
           }
         } else if (ctx.onOpenNote) {
+          const sub = subpath || undefined
           const path = wikiEl.getAttribute('data-path')
           if (path) {
-            ctx.onOpenNote(path)
+            ctx.onOpenNote(path, sub)
             return true
           }
           void resolveTargetPath(wikiTarget, ctx).then((p) => {
-            if (p) ctx.onOpenNote?.(p)
+            if (p) ctx.onOpenNote?.(p, sub)
           })
           return true
         }
@@ -1619,8 +1622,9 @@ export interface LivePreviewOpts {
   workspace?: string
   /** Absolute path of this document (embed cycle guard). */
   docPath?: string
-  /** Reading-mode navigation: open a resolved note path. */
-  onOpenNote?: (path: string) => void
+  /** Reading-mode navigation: open a resolved note path (+ optional
+   * subpath to scroll to). */
+  onOpenNote?: (path: string, subpath?: string) => void
 }
 
 export function livePreviewPlugin(opts: LivePreviewOpts = {}): Extension {

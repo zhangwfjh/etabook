@@ -174,6 +174,7 @@ export async function readNote(path: string): Promise<string> {
 // ---- Embed extraction -------------------------------------------------------
 
 const HEADING_RE = /^(#{1,6})\s+(.+?)\s*#*\s*$/
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /**
  * Extract the embedded slice of a note's source for a `#subpath`:
@@ -190,7 +191,7 @@ export function extractEmbedContent(src: string, subpath: string | undefined): s
     const id = subpath.slice(1)
     let idx = -1
     for (let i = 0; i < lines.length; i++) {
-      const m = lines[i].match(new RegExp(`(?:^|\\s)\\^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`))
+      const m = lines[i].match(new RegExp(`(?:^|\\s)\\^${escapeRe(id)}\\s*$`))
       if (m) { idx = i; break }
     }
     if (idx < 0) return null
@@ -201,7 +202,7 @@ export function extractEmbedContent(src: string, subpath: string | undefined): s
     // Drop the block-ID marker itself from the rendered slice.
     const block = lines.slice(start, end)
     const last = block.length - 1
-    block[last] = block[last].replace(new RegExp(`\\s*\\^${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`), '')
+    block[last] = block[last].replace(new RegExp(`\\s*\\^${escapeRe(id)}\\s*$`), '')
     return block.join('\n')
   }
 
@@ -229,13 +230,28 @@ export function extractEmbedContent(src: string, subpath: string | undefined): s
   return lines.slice(idx, end).join('\n').trimEnd()
 }
 
-/** Find the doc offset of a heading (`#Heading` / `#Parent#Sub` link), for
- * scroll-to-heading navigation. -1 when absent. */
+/** Find the doc offset of a heading (`#Heading` / `#Parent#Sub`) or block
+ * (`#^block-id`), for scroll-to-target navigation. -1 when absent. */
 export function headingOffset(src: string, subpath: string): number {
+  const lines = src.split('\n')
+  let pos = 0
+  if (subpath.startsWith('^')) {
+    // Block reference: jump to the start of the blank-delimited block that
+    // carries the `^id` marker (same block notion as extractEmbedContent).
+    const re = new RegExp(`(?:^|\\s)${escapeRe(subpath)}\\s*$`)
+    let hit = -1
+    for (let i = 0; i < lines.length; i++) {
+      if (re.test(lines[i])) { hit = i; break }
+    }
+    if (hit < 0) return -1
+    let start = hit
+    while (start > 0 && lines[start - 1].trim() !== '') start--
+    for (let i = 0; i < start; i++) pos += lines[i].length + 1
+    return pos
+  }
   const segments = subpath.split('#').filter(Boolean)
   const wanted = segments[segments.length - 1].trim().toLowerCase()
-  let pos = 0
-  for (const line of src.split('\n')) {
+  for (const line of lines) {
     const m = line.match(HEADING_RE)
     if (m && m[2].trim().toLowerCase() === wanted) return pos
     pos += line.length + 1

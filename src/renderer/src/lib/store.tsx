@@ -1,6 +1,6 @@
 import { createContext, useContext, useReducer, type Dispatch, type ReactNode } from 'react'
 import type { EditorMode } from '@shared/types'
-import { nextUntitledName } from './fs'
+import { nextUntitledName, normPath } from './fs'
 
 export type Doc = {
   id: string
@@ -12,6 +12,10 @@ export type Doc = {
   savedContent: string
   selection: { from: number; to: number } | null
   scroll: number
+  /** True while the tab is TEMPORARY (preview): opening another file
+   * replaces it in place. Pinned by a tab double-click or the first
+   * content edit. At most one preview tab exists at a time. */
+  preview: boolean
 }
 
 export type AppState = {
@@ -28,7 +32,7 @@ export type AppState = {
 
 export type Action =
   | { type: 'new-doc'; doc?: Doc }
-  | { type: 'open-doc'; path: string; content: string }
+  | { type: 'open-doc'; path: string; content: string; persistent?: boolean }
   | { type: 'close-doc'; id: string }
   | { type: 'activate'; id: string }
   | { type: 'set-content'; id: string; content: string }
@@ -39,11 +43,28 @@ export type Action =
   | { type: 'palette'; open: boolean }
   | { type: 'settings'; open: boolean }
   | { type: 'shortcuts'; open: boolean }
+  | { type: 'pin-doc'; id: string }
   | { type: 'save-status'; status: AppState['saveStatus'] }
   | { type: 'rename-doc'; id: string; path: string }
 
 function genId(): string {
   return Math.random().toString(36).slice(2, 10)
+}
+
+/** Construct an open-file doc. Preview tabs (see Doc.preview) are created
+ * by `open-doc`; everything else constructs its own Doc literal. */
+export function makeDoc(path: string, content: string, preview: boolean): Doc {
+  return {
+    id: genId(),
+    path,
+    name: path.split(/[\\/]/).pop() ?? path,
+    content,
+    savedContent: content,
+    dirty: false,
+    selection: null,
+    scroll: 0,
+    preview
+  }
 }
 
 function initial(): AppState {
@@ -58,7 +79,8 @@ function initial(): AppState {
     dirty: false,
     savedContent: content,
     selection: null,
-    scroll: 0
+    scroll: 0,
+    preview: false
   }
   return {
     docs: [first],
@@ -83,37 +105,51 @@ function reducer(state: AppState, action: Action): AppState {
           dirty: false,
           savedContent: '',
           selection: null,
-          scroll: 0
+          scroll: 0,
+          preview: false
         }
       return { ...state, docs: [...state.docs, doc], activeId: doc.id }
     }
     case 'open-doc': {
-      // If already open, just activate.
-      const existing = state.docs.find((d) => d.path === action.path)
-      if (existing) return { ...state, activeId: existing.id }
+      // If already open, just activate. Compare via normPath: tabs opened
+      // from the file tree carry Windows `\` paths while the wikilink
+      // resolver yields `/` — same file either way.
+      const existing = state.docs.find((d) => d.path && normPath(d.path) === normPath(action.path))
+      if (existing) {
+        // Persistent reopen (e.g. tree double-click) pins a preview tab.
+        if (action.persistent && existing.preview) {
+          return {
+            ...state,
+            activeId: existing.id,
+            docs: state.docs.map((d) => (d.id === existing.id ? { ...d, preview: false } : d))
+          }
+        }
+        return { ...state, activeId: existing.id }
+      }
+      const doc = makeDoc(action.path, action.content, !action.persistent)
+      // Reuse the temporary (preview) tab: it changes identity in place so
+      // no editor state (undo history, scroll) carries over to the new file.
+      const pIdx = state.docs.findIndex((d) => d.preview)
+      if (pIdx >= 0) {
+        const docs = state.docs.slice()
+        docs[pIdx] = doc
+        return { ...state, docs, activeId: doc.id }
+      }
       // Replace an empty, untouched untitled doc if it's the only one.
-      let docs = state.docs
-      if (
+      const docs =
         state.docs.length === 1 &&
         !state.docs[0].path &&
         !state.docs[0].dirty &&
         state.docs[0].content === ''
-      ) {
-        docs = []
-      }
-      const name = action.path.split(/[\\/]/).pop() ?? action.path
-      const doc: Doc = {
-        id: genId(),
-        path: action.path,
-        name,
-        content: action.content,
-        savedContent: action.content,
-        dirty: false,
-        selection: null,
-        scroll: 0
-      }
+          ? []
+          : state.docs
       return { ...state, docs: [...docs, doc], activeId: doc.id }
     }
+    case 'pin-doc':
+      return {
+        ...state,
+        docs: state.docs.map((d) => (d.id === action.id ? { ...d, preview: false } : d))
+      }
     case 'close-doc': {
       const idx = state.docs.findIndex((d) => d.id === action.id)
       const docs = state.docs.filter((d) => d.id !== action.id)
@@ -132,7 +168,7 @@ function reducer(state: AppState, action: Action): AppState {
         ...state,
         docs: state.docs.map((d) =>
           d.id === action.id
-            ? { ...d, content: action.content, dirty: action.content !== d.savedContent }
+            ? { ...d, content: action.content, dirty: action.content !== d.savedContent, preview: false }
             : d
         )
       }

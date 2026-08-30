@@ -3,11 +3,14 @@ import { ChevronRight, ChevronDown, FileText, Folder, FolderOpen, FilePlus, Refr
 import { api } from '@renderer/lib/ipc'
 import type { FSNode } from '@shared/types'
 import { Button, Tooltip } from '@renderer/components/ui'
+import { normPath } from '@renderer/lib/fs'
 
 type Props = {
   workspace: string | undefined
   activePath: string | undefined
-  onOpen: (path: string) => void
+  /** Open a file. persistent=true (double-click) pins the tab instead of
+   * leaving it as a replaceable preview. */
+  onOpen: (path: string, persistent?: boolean) => void
   onPickFolder: () => void
   onCreate: (parentDir: string) => void
   refreshKey: number
@@ -79,7 +82,7 @@ function TreeRow({
   node: FSNode
   depth: number
   activePath: string | undefined
-  onOpen: (p: string) => void
+  onOpen: (p: string, persistent?: boolean) => void
 }): ReactElement {
   const [open, setOpen] = useState(depth < 1)
   const [children, setChildren] = useState<FSNode[]>(node.children ?? [])
@@ -88,7 +91,7 @@ function TreeRow({
     setChildren(node.children ?? [])
   }, [node.children])
 
-  const isActive = activePath === node.path
+  const isActive = !!activePath && normPath(activePath) === normPath(node.path)
   const pad = 8 + depth * 14
 
   if (node.isDir) {
@@ -118,6 +121,10 @@ function TreeRow({
       }`}
       style={{ paddingLeft: pad + 16, paddingRight: 8 }}
       onClick={() => onOpen(node.path)}
+      onDoubleClick={(e) => {
+        e.preventDefault()
+        onOpen(node.path, true)
+      }}
     >
       <FileText size={13} className="shrink-0 mr-1.5 opacity-60" />
       <span className="truncate">{node.name}</span>
