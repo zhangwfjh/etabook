@@ -12,10 +12,16 @@ export function slugify(input: string): string {
   )
 }
 
-let untitledSeq = 0
-export function nextUntitledName(): string {
-  untitledSeq += 1
-  return `Untitled-${untitledSeq}.md`
+/** Next free untitled name derived from the open docs — pure, so React's
+ *  double-invoked reducers can't skip numbers, and closed tabs free their
+ *  numbers for reuse (no gaps, no collisions). */
+export function nextUntitledName(docs: { name: string }[] = []): string {
+  let max = 0
+  for (const d of docs) {
+    const m = /^Untitled-(\d+)\.md$/.exec(d.name)
+    if (m) max = Math.max(max, Number(m[1]))
+  }
+  return `Untitled-${max + 1}.md`
 }
 
 export function basename(path: string): string {

@@ -38,7 +38,6 @@ import {
 import { dropEditorState } from '@renderer/editor/Editor'
 import { installEditorApi } from '@renderer/features/findReplace/editorApi'
 import { exportMarkdown, exportHtml, exportPdf } from '@renderer/features/export/export'
-import { nextUntitledName } from '@renderer/lib/fs'
 import type { MenuAction } from '@shared/types'
 
 export function App(): ReactElement {
@@ -266,12 +265,6 @@ export function App(): ReactElement {
     onQuickOpen: () => setQuickOpen(true),
   })
 
-  // Build a fresh welcome doc name only when needed.
-  const lastUntitled = useRef('')
-  if (!lastUntitled.current && state.docs.length === 0) {
-    lastUntitled.current = nextUntitledName()
-  }
-
   function jumpToPos(pos: number): void {
     const view = getActiveEditorView()
     if (view) {
@@ -406,7 +399,18 @@ export function App(): ReactElement {
                   onCursorChange={setCursorPos}
                   onReady={(v) => setPaneView('left', v)}
                 />
-              ) : null}
+              ) : (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 select-none">
+                  <span className="font-serif text-lg text-[var(--text)]">No tabs open</span>
+                  <span className="text-[13px] text-[var(--text-muted)] flex items-center gap-1.5">
+                    Press
+                    <kbd className="font-mono text-[12px] px-1.5 py-0.5 rounded border border-[var(--border)] bg-[var(--surface-2)]">
+                      Ctrl+N
+                    </kbd>
+                    for a new note, or open one from the sidebar
+                  </span>
+                </div>
+              )}
             </div>
             {splitOpen && activeDoc && (
               <>

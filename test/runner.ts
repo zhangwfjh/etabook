@@ -330,6 +330,95 @@ export const TESTS = [
       r.filterKeyword && r.calloutInserted && r.transformMenuOpen && r.headingTransformed &&
       r.codeBelow && r.suppressedInCode && r.offInSource
   }
+  ,
+  {
+    id: 'tab-scroll-reset',
+    description:
+      'A tab opened for the first time starts at the top (no scroll inherited from the previous tab); switching back restores the previous tab\'s scroll position',
+    probe: async (tab) => {
+      const sleep = (ms: number) => {
+        const { promise, resolve } = Promise.withResolvers<void>()
+        setTimeout(resolve, ms)
+        return promise
+      }
+      // Live mode: the reading-mode measurement sweep scrolls the document on
+      // its own and would race the assertions below.
+      await tab.evaluate(() => {
+        const b = [...document.querySelectorAll('button')].find((x) => x.textContent.trim() === 'Live')
+        if (b) b.click()
+      })
+      await sleep(500)
+      const scroll = () =>
+        tab.evaluate(() => {
+          const s = document.querySelector<HTMLElement>('.cm-scroller')
+          return { top: Math.round(s.scrollTop), max: s.scrollHeight - s.clientHeight }
+        })
+      const closeTab = (name: string) =>
+        tab.evaluate((n) => {
+          const btn = [...document.querySelectorAll('button')].find(
+            (x) => (x.getAttribute('aria-label') || x.title || '').includes('Close ' + n)
+          )
+          btn?.click()
+        }, name)
+      const openFromSidebar = (name: string) =>
+        tab.evaluate((n) => {
+          const btn = [...document.querySelectorAll('aside button, [role="complementary"] button')].find(
+            (x) => x.textContent?.trim() === n
+          )
+          if (!btn) throw new Error('sidebar file not found: ' + n)
+          btn.click()
+        }, name)
+      const clickTab = (name: string) =>
+        tab.evaluate((n) => {
+          const t = [...document.querySelectorAll('div,button')].find(
+            (x) => x.textContent?.trim() === n && x.querySelector('button[aria-label*="Close"]')
+          )
+          if (!t) throw new Error('tab not found: ' + n)
+          t.click()
+        }, name)
+
+      // Pick the two most scrollable workspace notes: inherited scroll only
+      // shows on a document tall enough to scroll past one viewport.
+      const files = await tab.evaluate(() =>
+        [...document.querySelectorAll('aside button, [role="complementary"] button')]
+          .map((b) => b.textContent?.trim())
+          .filter((t): t is string => !!t?.endsWith('.md'))
+          .filter((t, i, all) => all.indexOf(t) === i)
+      )
+      const heights: { name: string; max: number }[] = []
+      for (const f of files) {
+        await closeTab(f)
+        await sleep(250)
+        await openFromSidebar(f)
+        await sleep(450)
+        heights.push({ name: f, max: (await scroll()).max })
+        await closeTab(f)
+        await sleep(250)
+      }
+      const tallest = heights.filter((h) => h.max >= 250).sort((x, y) => y.max - x.max)
+      const [a, b] = tallest
+      if (!a || !b) throw new Error('workspace needs two scrollable notes for the tab scroll probe')
+
+      await openFromSidebar(a.name)
+      await sleep(600)
+      const scrolledTo = await tab.evaluate((y) => {
+        const s = document.querySelector<HTMLElement>('.cm-scroller')
+        s.scrollTop = y
+        return Math.round(s.scrollTop)
+      }, Math.min(250, a.max - 20))
+
+      await openFromSidebar(b.name) // first open — must start at the top
+      await sleep(700)
+      const newTabTop = (await scroll()).top
+
+      await clickTab(a.name) // switch back — the stash must restore the offset
+      await sleep(700)
+      const restoredTop = (await scroll()).top
+
+      return { a: a.name, b: b.name, scrolledTo, newTabTop, restoredTop }
+    },
+    expect: (r) => r.newTabTop === 0 && Math.abs(r.restoredTop - r.scrolledTo) <= 40
+  }
 ]
 
 const SAMPLE_DOC = [

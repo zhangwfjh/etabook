@@ -207,6 +207,13 @@ export function Editor(props: EditorProps): React.JSX.Element {
         })
         return
       }
+      // No usable stash: this tab is being shown for the first time (or its
+      // stash went stale). The scroller still sits where the outgoing tab
+      // left it, and the text replacement below preserves that position —
+      // start the tab at the top instead.
+      requestAnimationFrame(() => {
+        if (viewRef.current === view) view.scrollDOM.scrollTop = 0
+      })
     }
     // External doc change for the same doc id — replace only if it differs.
     if (view.state.doc.toString() === props.doc) return

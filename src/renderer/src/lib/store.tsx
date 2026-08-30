@@ -78,7 +78,7 @@ function reducer(state: AppState, action: Action): AppState {
       const doc: Doc =
         action.doc ?? {
           id: genId(),
-          name: nextUntitledName(),
+          name: nextUntitledName(state.docs),
           content: '',
           dirty: false,
           savedContent: '',
@@ -119,20 +119,9 @@ function reducer(state: AppState, action: Action): AppState {
       const docs = state.docs.filter((d) => d.id !== action.id)
       let activeId = state.activeId
       if (state.activeId === action.id) {
-        if (docs.length === 0) {
-          const blank: Doc = {
-            id: genId(),
-            name: nextUntitledName(),
-            content: '',
-            dirty: false,
-            savedContent: '',
-            selection: null,
-            scroll: 0
-          }
-          return { ...state, docs: [blank], activeId: blank.id }
-        }
         const next = docs[Math.min(idx, docs.length - 1)]
-        activeId = next.id
+        // Closing the last tab leaves zero tabs — no auto-created blank.
+        activeId = next ? next.id : null
       }
       return { ...state, docs, activeId }
     }
